@@ -20,7 +20,82 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-white;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Math content styles */
+.math-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.math-content .katex {
+  font-size: 1.1em;
+  max-width: 100%;
+  text-rendering: auto;
+}
+
+/* Improve rendering of variables */
+.math-content .katex .mord {
+  font-weight: normal;
+}
+
+/* Improve display of fractions */
+.math-content .katex .mfrac {
+  min-width: 0.6em;
+}
+
+/* Improve the rendering of subscripts and superscripts */
+.math-content .katex .msupsub {
+  text-align: left;
+}
+
+/* Improve display for special functions */
+.math-content .katex .mop {
+  margin-right: 0.1em;
+}
+
+/* Better spacing for larger expressions */
+.math-content .katex-display > .katex {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.2em 0;
+}
+
+/* Make sure math display mode is centered but scrollable horizontally */
+.math-content .katex-display::-webkit-scrollbar {
+  height: 3px;
+}
+
+.math-content .katex-display::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.math-content .katex-display::-webkit-scrollbar-track {
+  background-color: rgba(229, 231, 235, 0.3);
+}
+
+/* Add better spacing for inline math */
+.math-content p .katex {
+  padding: 0 0.1em;
+}
+
+.markdown-content {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.markdown-content ul, 
+.markdown-content ol {
+  padding-left: 1.5rem;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
 }

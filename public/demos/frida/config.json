@@ -1,0 +1,23 @@
+{
+  "id": "frida",
+  "title": "Frida",
+  "author": "beny",
+  "icon": "demos/frida/icon.svg",
+  "assistants": [
+    {
+      "id": "benji",
+      "name": "benji",
+      "description": "bonnis",
+      "hasPassword": false,
+      "icon": "demos/frida/assistants/benji/icon.svg"
+    },
+    {
+      "id": "franko",
+      "name": "franko",
+      "description": "frani",
+      "hasPassword": true,
+      "password": "pickles",
+      "icon": "demos/frida/assistants/franko/icon.svg"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "janzibar",
+  "title": "Janzibar",
+  "author": "jany",
+  "assistants": [
+    {
+      "id": "bingo",
+      "name": "bingo",
+      "description": "jackson",
+      "hasPassword": false
+    },
+    {
+      "id": "franzworth",
+      "name": "franzworth",
+      "description": "hi",
+      "hasPassword": true,
+      "password": "pickles"
+    }
+  ]
+}
