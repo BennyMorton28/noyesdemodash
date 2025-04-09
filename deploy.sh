@@ -462,9 +462,17 @@ NGINX
   echo "Cleaning up old PM2 logs..."
   find /home/ec2-user/.pm2/logs -type f -mtime +3 | xargs -I {} rm -f {}
   
-  # Ensure demo files are in the correct location for Nginx
+  # Ensure demo files are in the correct location for Nginx access
   echo "Ensuring demo files are in the correct location for Nginx access..."
   sudo mkdir -p /home/ec2-user/app/public
+  
+  # Make sure .next/static directory exists
+  echo "Ensuring .next/static directory exists for CSS and JS files..."
+  sudo mkdir -p /home/ec2-user/app/.next/static
+  
+  # Copy static files
+  echo "Copying static files for CSS and JS..."
+  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
   
   # Preserve existing demo files before copying new ones
   echo "Preserving existing demo files..."
