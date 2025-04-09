@@ -137,6 +137,7 @@ EOL
 server {
     server_name demos.noyesai.com;
     
+    # Main application proxy
     location / {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -147,10 +148,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        
+        # Increase timeouts to prevent 502s during deployment
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        
+        # Don't fail immediately if backend is down
+        proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
     }
     
-    # Serve static files directly
-    location ~ ^/favicon.ico$ {
+    # Serve favicon directly
+    location = /favicon.ico {
         root /home/ec2-user/app/public;
         access_log off;
         expires 30d;
@@ -158,22 +167,28 @@ server {
         try_files $uri =404;
     }
     
-    # Serve other static assets directly
-    location ~ ^/_next/static/(.*)$ {
-        root /home/ec2-user/app;
+    # Serve Next.js static files directly
+    location /_next/static/ {
+        alias /home/ec2-user/app/.next/static/;
         access_log off;
         expires 7d;
         add_header Cache-Control "public, no-transform";
-        try_files $uri =404;
     }
     
-    # Serve public directory assets directly
-    location ~ ^/public/(.*)$ {
-        root /home/ec2-user/app;
+    # Serve demos folder directly
+    location /demos/ {
+        alias /home/ec2-user/app/public/demos/;
         access_log off;
         expires 1d;
         add_header Cache-Control "public, max-age=86400";
-        try_files $uri =404;
+    }
+    
+    # Serve public directory assets directly
+    location /public/ {
+        alias /home/ec2-user/app/public/;
+        access_log off;
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400";
     }
     
     listen 443 ssl;
@@ -255,27 +270,70 @@ NGINX
   # Ensure demo files are in the correct location for Nginx
   echo "Ensuring demo files are in the correct location for Nginx access..."
   sudo mkdir -p /home/ec2-user/app/public
-  sudo rm -rf /home/ec2-user/app/public/demos
-  sudo rm -rf /home/ec2-user/app/public/markdown
-  sudo rm -rf /home/ec2-user/app/public/icons
+  sudo mkdir -p /home/ec2-user/app/.next/static
   
   # Copy all demo files from the latest deployment to where Nginx expects them
-  sudo cp -r /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/* /home/ec2-user/app/public/
+  echo "Copying demo files to Nginx-accessible location..."
+  # First copy the static files
+  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
+  
+  # Then copy the public files
+  sudo rm -rf /home/ec2-user/app/public/*
+  sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
   
   # Set correct permissions
+  echo "Setting correct file permissions..."
   sudo chown -R ec2-user:ec2-user /home/ec2-user/app/public
+  sudo chown -R ec2-user:ec2-user /home/ec2-user/app/.next
   sudo find /home/ec2-user/app/public -type f -exec chmod 644 {} \;
   sudo find /home/ec2-user/app/public -type d -exec chmod 755 {} \;
+  sudo find /home/ec2-user/app/.next/static -type f -exec chmod 644 {} \;
+  sudo find /home/ec2-user/app/.next/static -type d -exec chmod 755 {} \;
   
-  # Verify the site is accessible
-  echo "Verifying site accessibility..."
-  if curl -s -I https://demos.noyesai.com | grep -q "200 OK"; then
-    echo "✅ Site is accessible and returning 200 OK"
+  # Verify app is working
+  echo "Verifying app is operational..."
+  MAX_RETRIES=5
+  RETRY_COUNT=0
+  APP_OK=false
+  
+  while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$APP_OK" = false ]; do
+    if curl -s -I https://demos.noyesai.com | grep -q "200 OK"; then
+      APP_OK=true
+      echo "✅ Site is accessible and returning 200 OK"
+    else
+      RETRY_COUNT=$((RETRY_COUNT+1))
+      echo "⚠️ Site verification failed. Retry $RETRY_COUNT of $MAX_RETRIES..."
+      
+      # Check if app is running
+      if ! pm2 show noyesdemodash > /dev/null 2>&1; then
+        echo "App is not running. Restarting PM2 process..."
+        pm2 restart noyesdemodash
+      fi
+      
+      # Check Nginx status
+      if ! systemctl is-active --quiet nginx; then
+        echo "Nginx is not running. Restarting Nginx..."
+        sudo systemctl restart nginx
+      else
+        echo "Reloading Nginx configuration..."
+        sudo systemctl reload nginx
+      fi
+      
+      # Wait a moment before retrying
+      sleep 10
+    fi
+  done
+  
+  if [ "$APP_OK" = false ]; then
+    echo "❌ ERROR: Site is still not accessible after $MAX_RETRIES retries!"
+    echo "Please check server logs for more information."
+    echo "Nginx status: $(systemctl status nginx | grep Active)"
+    echo "PM2 status: $(pm2 status | grep noyesdemodash)"
+    echo "Last few Nginx error log lines:"
+    sudo tail -n 20 /var/log/nginx/error.log
   else
-    echo "⚠️ Site verification failed. Please check the logs."
+    echo "Deployment completed successfully!"
   fi
-  
-  echo "Deployment completed successfully!"
 ENDSSH
 
 echo -e "\n${BLUE}===== Deployment Complete =====${NC}"
