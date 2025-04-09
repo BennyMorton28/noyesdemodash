@@ -254,23 +254,27 @@ EOL
   sudo find /etc/nginx/conf.d/ -name "*.conf" -type f -exec grep -l "demos.noyesai.com" {} \; | xargs -I {} sudo cp {} /etc/nginx/conf.d/backup/ 2>/dev/null || true
   sudo find /etc/nginx/conf.d/ -name "*.conf" -type f -exec grep -l "demos.noyesai.com" {} \; | xargs -I {} sudo rm {} 2>/dev/null || true
   
+  # Get the internal IP
+  INTERNAL_IP=$(hostname -I | awk '{print $1}')
+  echo "Server internal IP: ${INTERNAL_IP}"
+  
   # Update the Nginx configuration to point to the new port with SSL support
   echo "Creating new Nginx configuration with SSL support..."
-  cat > /tmp/demos.noyesai.com.conf << 'NGINX'
+  cat > /tmp/demos.noyesai.com.conf << NGINX
 server {
     server_name demos.noyesai.com;
     
     # Main application proxy
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://${INTERNAL_IP}:3000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
         
         # Increase timeouts to prevent 502s during deployment
         proxy_connect_timeout 300s;
@@ -287,7 +291,7 @@ server {
         access_log off;
         expires 30d;
         add_header Cache-Control "public, no-transform";
-        try_files $uri =404;
+        try_files \$uri =404;
     }
     
     # Serve Next.js static files directly
@@ -322,8 +326,8 @@ server {
 }
 
 server {
-    if ($host = demos.noyesai.com) {
-        return 301 https://$host$request_uri;
+    if (\$host = demos.noyesai.com) {
+        return 301 https://\$host\$request_uri;
     }
 
     listen 80; 
@@ -347,10 +351,6 @@ NGINX
   # Verify app is running on the correct port
   echo "Verifying application is running on port ${TARGET_PORT}..."
   APP_PORT=""
-  
-  # Get the internal IP
-  INTERNAL_IP=$(hostname -I | awk '{print $1}')
-  echo "Server internal IP: ${INTERNAL_IP}"
   
   # Wait up to 30 seconds for the app to start - try multiple ways to connect
   for i in {1..30}; do
