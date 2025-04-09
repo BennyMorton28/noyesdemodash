@@ -14,21 +14,16 @@ This guide provides instructions for deploying the AI Demo Platform on a Linux s
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd demo-platform
+   git clone https://github.com/BennyMorton28/noyesdemodash.git
+   cd noyesdemodash
    ```
 
 2. Install dependencies:
    ```bash
-   npm install
+   npm ci
    ```
 
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   
-4. Edit the `.env` file and add your OpenAI API key:
+3. Create or edit the `.env` file and add your OpenAI API key:
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    ```
@@ -45,122 +40,106 @@ This guide provides instructions for deploying the AI Demo Platform on a Linux s
    npm run start
    ```
 
-## Deployment Options
+## Production Deployment
 
-### Option 1: Manual Deployment
-
-1. Transfer the built application to your server using SCP or SFTP:
+1. Ensure required directories exist with proper permissions:
    ```bash
-   scp -r .next package.json public server.js node_modules user@your-server:/path/to/app
+   mkdir -p public/demos public/markdown
+   chmod 755 public/demos public/markdown
    ```
 
-2. Set up a process manager like PM2:
+2. Install PM2 process manager:
    ```bash
    npm install -g pm2
-   pm2 start npm --name "demo-platform" -- start
+   ```
+
+3. Create a PM2 ecosystem file:
+   ```bash
+   cat > ecosystem.config.js << 'EOL'
+   module.exports = {
+     apps: [{
+       name: "noyesdemodash",
+       script: "node_modules/next/dist/bin/next",
+       args: "start",
+       instances: 1,
+       autorestart: true,
+       watch: false,
+       max_memory_restart: "1G",
+       env: {
+         NODE_ENV: "production",
+         PORT: 3000
+       }
+     }]
+   }
+   EOL
+   ```
+
+4. Start the application with PM2:
+   ```bash
+   pm2 start ecosystem.config.js
+   ```
+
+5. Configure PM2 to start on system boot:
+   ```bash
    pm2 save
    pm2 startup
    ```
 
-### Option 2: Using Docker
+## Nginx Configuration
 
-1. Create a Dockerfile in the project root:
-   ```
-   FROM node:18-alpine AS base
+For production deployment, it's recommended to use Nginx as a reverse proxy:
 
-   # Install dependencies only when needed
-   FROM base AS deps
-   WORKDIR /app
-   COPY package.json package-lock.json ./
-   RUN npm ci
-
-   # Rebuild the source code only when needed
-   FROM base AS builder
-   WORKDIR /app
-   COPY --from=deps /app/node_modules ./node_modules
-   COPY . .
-   RUN npm run build
-
-   # Production image, copy all the files and run next
-   FROM base AS runner
-   WORKDIR /app
-
-   ENV NODE_ENV production
-
-   # Create a non-root user
-   RUN addgroup --system --gid 1001 nodejs
-   RUN adduser --system --uid 1001 nextjs
-
-   COPY --from=builder /app/public ./public
-   COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-   COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-   USER nextjs
-
-   EXPOSE 3000
-
-   ENV PORT 3000
-
-   CMD ["node", "server.js"]
-   ```
-
-2. Build and run the Docker container:
+1. Install Nginx:
    ```bash
-   docker build -t demo-platform .
-   docker run -p 3000:3000 -e OPENAI_API_KEY=your_key_here demo-platform
+   # For Amazon Linux
+   sudo yum install -y nginx
+   
+   # For Ubuntu/Debian
+   sudo apt install -y nginx
    ```
 
-### Option 3: Using a PaaS (Platform as a Service)
+2. Create Nginx configuration:
+   ```bash
+   sudo bash -c 'cat > /etc/nginx/conf.d/noyesdemodash.conf << EOL
+   server {
+       listen 80;
+       server_name _;
 
-The application is also compatible with services like:
-- Vercel (optimized for Next.js)
-- Netlify
-- Railway
-- Render
+       location / {
+           proxy_pass http://localhost:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade \$http_upgrade;
+           proxy_set_header Connection "upgrade";
+           proxy_set_header Host \$host;
+           proxy_set_header X-Real-IP \$remote_addr;
+           proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto \$scheme;
+           proxy_set_header X-Forwarded-Host \$host;
+           proxy_set_header X-Forwarded-Port \$server_port;
+           proxy_cache_bypass \$http_upgrade;
+       }
+   }
+   EOL'
+   ```
 
-Follow the platform-specific deployment instructions and set up the necessary environment variables.
-
-## File Directories and Permissions
-
-Ensure these directories exist and have proper write permissions:
-
-1. `public/demos` - For storing demo configurations
-2. `public/markdown` - For storing markdown files
-
-```bash
-mkdir -p public/demos public/markdown
-chmod 755 public/demos public/markdown
-```
-
-## Nginx Configuration (Optional)
-
-If you're using Nginx as a reverse proxy:
-
-```
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
+3. Start and enable Nginx:
+   ```bash
+   sudo systemctl start nginx
+   sudo systemctl enable nginx
+   ```
 
 ## Setting Up HTTPS with Let's Encrypt
 
 1. Install Certbot:
    ```bash
-   sudo apt update
-   sudo apt install certbot python3-certbot-nginx
+   # For Amazon Linux
+   sudo yum install -y certbot python3-certbot-nginx
+   
+   # For Ubuntu/Debian
+   sudo apt install -y certbot python3-certbot-nginx
    ```
 
-2. Obtain SSL certificate:
+2. Obtain SSL certificate (replace yourdomain.com with your actual domain):
    ```bash
    sudo certbot --nginx -d yourdomain.com
    ```
@@ -169,6 +148,22 @@ server {
    ```bash
    sudo systemctl status certbot.timer
    ```
+
+## Firewall Configuration
+
+On EC2 or other cloud instances, configure security groups to allow HTTP (80) and HTTPS (443) traffic. For systems with local firewalls:
+
+```bash
+# For systems with firewalld
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+
+# For systems with ufw (Ubuntu)
+sudo ufw allow http
+sudo ufw allow https
+sudo ufw reload
+```
 
 ## Monitoring and Maintenance
 
@@ -181,7 +176,7 @@ server {
 
 2. Set up regular backups of the data directories:
    ```bash
-   sudo apt install rsync
+   sudo yum install -y rsync # or apt install for Ubuntu
    # Add a cron job for regular backups
    echo "0 2 * * * rsync -a /path/to/app/public/demos /path/to/backup/" | sudo tee -a /etc/crontab
    ```
@@ -190,7 +185,9 @@ server {
 
 - **File permissions issues**: Ensure the user running the Node.js process has write access to the `public/demos` and `public/markdown` directories.
 - **API key errors**: Verify that the OPENAI_API_KEY environment variable is correctly set.
-- **Port conflicts**: If port 3000 is already in use, modify the PORT environment variable.
+- **Port conflicts**: If port 3000 is already in use, modify the PORT environment variable in the ecosystem.config.js file.
+- **Nginx errors**: Check Nginx logs with `sudo tail -f /var/log/nginx/error.log`
+- **Application errors**: Check PM2 logs with `pm2 logs noyesdemodash`
 
 ## Security Considerations
 
