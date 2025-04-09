@@ -139,7 +139,7 @@ server {
     
     # Main application proxy
     location / {
-        proxy_pass http://localhost:3001;
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -209,9 +209,6 @@ server {
 }
 NGINX
   
-  # Replace PORT_PLACEHOLDER with actual port
-  sed -i "s/localhost:3001/localhost:${TARGET_PORT}/g" /tmp/demos.noyesai.com.conf
-  
   # Test Nginx configuration
   echo "Testing Nginx configuration..."
   sudo mv /tmp/demos.noyesai.com.conf /etc/nginx/conf.d/demos.noyesai.com.conf
@@ -240,12 +237,22 @@ NGINX
   
   # If app is not running on TARGET_PORT, check alternative ports
   if [ -z "$APP_PORT" ]; then
-    echo "App not detected on port ${TARGET_PORT}, checking alternative port 3001..."
-    if curl -s http://localhost:3001 > /dev/null; then
-      APP_PORT=3001
-      echo "App found running on port 3001, updating Nginx configuration..."
-      sudo sed -i "s/proxy_pass http:\/\/localhost:${TARGET_PORT};/proxy_pass http:\/\/localhost:${APP_PORT};/g" /etc/nginx/conf.d/demos.noyesai.com.conf
-      sudo systemctl reload nginx
+    echo "App not detected on port ${TARGET_PORT}. This is a critical error."
+    echo "Checking PM2 process status:"
+    pm2 status
+    echo "Checking if something else is using port ${TARGET_PORT}:"
+    sudo lsof -i:${TARGET_PORT}
+    
+    echo "Attempting to restart the application on port ${TARGET_PORT}..."
+    pm2 restart noyesdemodash-${DEPLOY_ID}
+    sleep 5
+    
+    if curl -s http://localhost:${TARGET_PORT} > /dev/null; then
+      APP_PORT=${TARGET_PORT}
+      echo "✅ Application restarted successfully on port ${TARGET_PORT}"
+    else
+      echo "❌ Failed to start application on expected port. Deployment failed."
+      exit 1
     fi
   fi
   
