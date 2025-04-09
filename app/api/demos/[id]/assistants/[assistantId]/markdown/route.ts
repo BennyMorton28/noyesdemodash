@@ -22,8 +22,12 @@ export async function GET(
       path.join(process.cwd(), 'public', 'markdown', `${demoId}-${assistantId}.md`),
       // Then check in the assistants directory for legacy support
       path.join(process.cwd(), 'assistants', `${demoId}-${assistantId}.md`),
-      // Finally check in a demo-specific directory for dynamic demos
-      path.join(process.cwd(), 'public', 'demos', demoId, 'markdown', `${assistantId}.md`)
+      // Check in a demo-specific directory for dynamic demos
+      path.join(process.cwd(), 'public', 'demos', demoId, 'markdown', `${assistantId}.md`),
+      // Check in the standalone directory for newly created demos
+      path.join(process.cwd(), '.next', 'standalone', 'public', 'markdown', `${demoId}-${assistantId}.md`),
+      // Also check the demo directory in standalone
+      path.join(process.cwd(), '.next', 'standalone', 'public', 'demos', demoId, 'markdown', `${assistantId}.md`)
     ];
 
     // Try each path until we find the file

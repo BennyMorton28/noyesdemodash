@@ -17,7 +17,9 @@ export async function GET(
     // Define paths to check for markdown files
     const paths = [
       path.join(process.cwd(), 'public', 'markdown', `${demoId}-explainer.md`),
-      path.join(process.cwd(), 'public', 'demos', demoId, 'explainer.md')
+      path.join(process.cwd(), 'public', 'demos', demoId, 'explainer.md'),
+      // Add path for newly created demos in the standalone directory
+      path.join(process.cwd(), '.next', 'standalone', 'public', 'demos', demoId, 'explainer.md')
     ];
 
     // Try each path in sequence

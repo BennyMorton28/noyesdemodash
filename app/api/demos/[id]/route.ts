@@ -15,7 +15,7 @@ export async function GET(
       return new NextResponse('Demo ID is required', { status: 400 });
     }
 
-    // Try to load the demo config
+    // Try to load the demo config from the main public directory
     const configPath = path.join(process.cwd(), 'public', 'demos', demoId, 'config.json');
     
     try {
@@ -30,8 +30,27 @@ export async function GET(
         },
       });
     } catch (error) {
-      // If file doesn't exist, try loading from static config
-      return new NextResponse('Demo not found', { status: 404 });
+      // If file doesn't exist in the main directory, try the current directory
+      // This is important for demos created through the UI on the server
+      console.log(`Demo ${demoId} not found in main public directory, trying current directory...`);
+      
+      // Try the current standalone directory (for demos created through the UI)
+      const currentDirConfigPath = path.join(process.cwd(), '.next', 'standalone', 'public', 'demos', demoId, 'config.json');
+      
+      try {
+        await fs.access(currentDirConfigPath);
+        const configData = await fs.readFile(currentDirConfigPath, 'utf-8');
+        const config = JSON.parse(configData);
+        
+        return new NextResponse(JSON.stringify(config), {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+      } catch (configError) {
+        console.error(`Demo ${demoId} not found in current directory either:`, configError);
+        return new NextResponse('Demo not found', { status: 404 });
+      }
     }
   } catch (error) {
     console.error('Error reading demo config:', error);
