@@ -39,8 +39,9 @@ ssh noyesdemos
 # Navigate to application directory
 cd /home/ec2-user/app
 
-# Pull latest changes
-git pull
+# Pull latest changes (safer method to handle branch differences)
+git fetch origin
+git reset --hard origin/main
 
 # Install dependencies
 npm ci

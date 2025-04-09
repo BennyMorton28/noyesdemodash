@@ -39,7 +39,8 @@ ssh noyesdemos << 'ENDSSH'
   
   # Pull the latest changes
   echo "Pulling latest changes from GitHub..."
-  git pull
+  git fetch origin
+  git reset --hard origin/main
   
   # Install dependencies if needed
   echo "Installing dependencies..."
