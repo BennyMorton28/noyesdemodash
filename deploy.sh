@@ -302,9 +302,22 @@ server {
         add_header Cache-Control "public, no-transform";
     }
     
-    # Serve demos folder directly
+    # Serve demos folder directly - both existing deployed demos and newly created ones
     location /demos/ {
-        alias /home/ec2-user/app/public/demos/;
+        # First try the main demos directory for deployed demos
+        root /home/ec2-user/app/public;
+        
+        # If not found, try the demos_live symlink for newly created demos
+        try_files \$uri \$uri/ /demos_live\$uri /demos_live\$uri/ =404;
+        
+        access_log off;
+        expires 1d;
+        add_header Cache-Control "public, max-age=86400";
+    }
+    
+    # Serve newly created demos directly from the demos_live symlink
+    location /demos_live/ {
+        alias /home/ec2-user/app/public/demos_live/;
         access_log off;
         expires 1d;
         add_header Cache-Control "public, max-age=86400";
@@ -452,25 +465,53 @@ NGINX
   # Ensure demo files are in the correct location for Nginx
   echo "Ensuring demo files are in the correct location for Nginx access..."
   sudo mkdir -p /home/ec2-user/app/public
-  sudo mkdir -p /home/ec2-user/app/.next/static
   
-  # Copy all demo files from the latest deployment to where Nginx expects them
-  echo "Copying demo files to Nginx-accessible location..."
-  # First copy the static files
-  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
-  
-  # Then copy the public files
-  sudo rm -rf /home/ec2-user/app/public/*
-  sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
+  # Preserve existing demo files before copying new ones
+  echo "Preserving existing demo files..."
+  if [ -d "/home/ec2-user/app/public/demos" ]; then
+    # Create a backup of current demos
+    DEMOS_BACKUP="/tmp/demos_backup_${DEPLOY_ID}"
+    sudo mkdir -p $DEMOS_BACKUP
+    sudo cp -r /home/ec2-user/app/public/demos/* $DEMOS_BACKUP/ 2>/dev/null || echo "No existing demos to back up"
+    
+    # Now copy new files but don't overwrite existing ones
+    echo "Copying new demo files from deployment..."
+    sudo mkdir -p /home/ec2-user/app/public/demos
+    
+    # Copy files from new deployment first
+    sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
+    
+    # Now restore any existing demo files that weren't in the new deployment
+    echo "Restoring any demo files not in the new deployment..."
+    if [ -d "$DEMOS_BACKUP" ]; then
+      for demo in $(ls $DEMOS_BACKUP); do
+        # If the demo doesn't exist in the new deployment, restore it
+        if [ ! -d "/home/ec2-user/app/public/demos/$demo" ]; then
+          echo "Restoring demo: $demo"
+          sudo cp -r "$DEMOS_BACKUP/$demo" "/home/ec2-user/app/public/demos/"
+        else
+          echo "Demo already exists in new deployment: $demo"
+        fi
+      done
+    fi
+    
+    # Clean up backup
+    sudo rm -rf $DEMOS_BACKUP
+  else
+    # If no existing demos, just copy everything from the new deployment
+    echo "No existing demos to preserve, copying all from new deployment..."
+    sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
+  fi
   
   # Set correct permissions
   echo "Setting correct file permissions..."
   sudo chown -R ec2-user:ec2-user /home/ec2-user/app/public
-  sudo chown -R ec2-user:ec2-user /home/ec2-user/app/.next
   sudo find /home/ec2-user/app/public -type f -exec chmod 644 {} \;
   sudo find /home/ec2-user/app/public -type d -exec chmod 755 {} \;
-  sudo find /home/ec2-user/app/.next/static -type f -exec chmod 644 {} \;
-  sudo find /home/ec2-user/app/.next/static -type d -exec chmod 755 {} \;
+  
+  # Create symlink for new demos to be immediately accessible
+  echo "Creating symlink for newly created demos..."
+  sudo ln -sf /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/demos /home/ec2-user/app/public/demos_live
   
   # Verify app is working
   echo "Verifying app is operational..."
