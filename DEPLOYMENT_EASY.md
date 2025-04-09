@@ -18,8 +18,9 @@ This script will:
 5. Pull the latest changes
 6. Install dependencies
 7. Build the application
-8. Update PM2 configuration with environment variables
-9. Restart the service
+8. Set up static files for standalone mode
+9. Update PM2 configuration with environment variables
+10. Restart the service
 
 ## Manual Deployment Steps
 
@@ -50,14 +51,24 @@ npm ci
 # Build the application
 npm run build
 
+# Fix static files in standalone mode
+mkdir -p .next/standalone/public
+mkdir -p .next/standalone/.next/static
+
+# Copy public directory to standalone
+cp -r public/* .next/standalone/public/
+
+# Copy static files to standalone static directory
+cp -r .next/static/* .next/standalone/.next/static/
+
 # Update PM2 configuration with environment variables
 OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
 cat > ecosystem.config.js << EOL
 module.exports = {
   apps: [{
     name: "noyesdemodash",
-    cwd: "/home/ec2-user/app",
-    script: "./.next/standalone/server.js",
+    cwd: "/home/ec2-user/app/.next/standalone",
+    script: "./server.js",
     instances: 1,
     autorestart: true,
     watch: false,
@@ -97,6 +108,17 @@ The application requires the following environment variables:
 
 These should be set in a `.env` file in the application root directory. The deployment script will automatically include them in the PM2 configuration.
 
+## About Next.js Standalone Mode
+
+This application uses Next.js standalone output mode, which requires special handling of static files:
+
+1. The standalone output is created in `.next/standalone/`
+2. Static files from `public/` must be copied to `.next/standalone/public/`
+3. Next.js static assets in `.next/static/` must be copied to `.next/standalone/.next/static/`
+4. PM2 must be configured to use the standalone directory as its working directory
+
+Our deployment script handles all these steps automatically.
+
 ## Troubleshooting
 
 If you encounter issues:
@@ -126,4 +148,11 @@ If you encounter issues:
    ssh noyesdemos
    cd /home/ec2-user/app
    pm2 env 0 | grep OPENAI
+   ```
+
+5. **404 Errors for Static Files**: Check if static files were correctly copied:
+   ```bash
+   ssh noyesdemos
+   ls -la /home/ec2-user/app/.next/standalone/public
+   ls -la /home/ec2-user/app/.next/standalone/.next/static
    ``` 

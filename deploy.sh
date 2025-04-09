@@ -50,6 +50,17 @@ ssh noyesdemos << 'ENDSSH'
   echo "Building the application..."
   npm run build
   
+  # Fix static files in standalone mode
+  echo "Setting up static files for standalone mode..."
+  mkdir -p .next/standalone/public
+  mkdir -p .next/standalone/.next/static
+  
+  # Copy public directory to standalone
+  cp -r public/* .next/standalone/public/
+  
+  # Copy static files to standalone static directory
+  cp -r .next/static/* .next/standalone/.next/static/
+  
   # Update the PM2 configuration to include environment variables
   echo "Updating PM2 configuration..."
   OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
@@ -57,8 +68,8 @@ ssh noyesdemos << 'ENDSSH'
 module.exports = {
   apps: [{
     name: "noyesdemodash",
-    cwd: "/home/ec2-user/app",
-    script: "./.next/standalone/server.js",
+    cwd: "/home/ec2-user/app/.next/standalone",
+    script: "./server.js",
     instances: 1,
     autorestart: true,
     watch: false,
