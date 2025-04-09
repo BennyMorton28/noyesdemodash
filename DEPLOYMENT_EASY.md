@@ -1,89 +1,87 @@
-# Easy Deployment Guide for Noyes Demos
+# Zero-Downtime Deployment Guide for Noyes Demos
 
-This document provides a simplified deployment process for the Noyes Demos platform.
+This document provides a simplified deployment process for the Noyes Demos platform with zero-downtime updates.
 
 ## One-Step Deployment
 
-We've created a simple deployment script that handles everything for you in one step:
+We've created a simple deployment script that handles everything for you in one step with zero downtime:
 
 ```bash
 ./deploy.sh "Your commit message"
 ```
 
-This script will:
+This script implements a blue-green deployment strategy, which means:
+1. A new version of the application is built and started in parallel with the existing one
+2. Once the new version is ready, traffic is switched to it
+3. The old version is then terminated
+4. This ensures users never experience an outage during deployments
+
+## The Deployment Process
+
+The script handles these steps:
 1. Add all your changes to git
 2. Commit them with your provided message
 3. Push to GitHub
 4. Connect to the server
 5. Pull the latest changes
-6. Install dependencies
-7. Build the application
-8. Set up static files for standalone mode
-9. Update PM2 configuration with environment variables
-10. Restart the service
+6. Create a new deployment directory with timestamp
+7. Copy codebase and build in the new directory
+8. Start the new application on a different port
+9. Update Nginx to route traffic to the new instance
+10. Shut down the old instance
+11. Clean up old deployments
+
+## How Zero-Downtime Deployment Works
+
+Our implementation uses the following strategy:
+
+1. **Versioned Deployments**: Each deployment creates a new directory with a timestamp, ensuring we can keep multiple versions and roll back if needed.
+
+2. **Port Switching**: Instead of restarting the application on the same port, we:
+   - Start the new version on a different port (3001)
+   - Wait for it to initialize fully
+   - Update Nginx to route traffic to the new port
+   - Only then shut down the old version
+
+3. **Cleanup**: We keep the last 3 deployments for quick rollbacks, but remove older ones to save disk space.
 
 ## Manual Deployment Steps
 
-If you need to perform these steps manually:
+If you need to perform these steps manually (not recommended):
 
-### 1. Push changes to GitHub
-```bash
-git add .
-git commit -m "Your commit message"
-git push
-```
-
-### 2. Deploy to Server
 ```bash
 # Connect to the server
 ssh noyesdemos
 
-# Navigate to application directory
+# Start a new deployment
 cd /home/ec2-user/app
+DEPLOY_ID=$(date +%Y%m%d%H%M%S)
+DEPLOY_DIR="/home/ec2-user/deployments/${DEPLOY_ID}"
+mkdir -p ${DEPLOY_DIR}
+cp -r ./ ${DEPLOY_DIR}/
 
-# Pull latest changes (safer method to handle branch differences)
-git fetch origin
-git reset --hard origin/main
-
-# Install dependencies
+# Build the new version
+cd ${DEPLOY_DIR}
 npm ci
-
-# Build the application
 npm run build
-
-# Fix static files in standalone mode
-mkdir -p .next/standalone/public
-mkdir -p .next/standalone/.next/static
-
-# Copy public directory to standalone
+mkdir -p .next/standalone/public .next/standalone/.next/static
 cp -r public/* .next/standalone/public/
-
-# Copy static files to standalone static directory
 cp -r .next/static/* .next/standalone/.next/static/
+cp /home/ec2-user/app/.env .next/standalone/
 
-# Update PM2 configuration with environment variables
+# Create and start the new PM2 process
 OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
-cat > ecosystem.config.js << EOL
-module.exports = {
-  apps: [{
-    name: "noyesdemodash",
-    cwd: "/home/ec2-user/app/.next/standalone",
-    script: "./server.js",
-    instances: 1,
-    autorestart: true,
-    watch: false,
-    max_memory_restart: "1G",
-    env: {
-      NODE_ENV: "production",
-      PORT: 3000,
-      OPENAI_API_KEY: "\${OPENAI_API_KEY}"
-    }
-  }]
-}
-EOL
+# Create ecosystem.config.js with PORT 3001
+pm2 start ecosystem.config.js
 
-# Restart the application
-pm2 reload ecosystem.config.js
+# Update Nginx and switch traffic
+# Update nginx config to point to the new port
+sudo systemctl reload nginx
+
+# Stop old process and rename new one
+pm2 delete noyesdemodash
+pm2 restart noyesdemodash-${DEPLOY_ID} --name noyesdemodash
+pm2 save
 ```
 
 ## Server SSH Configuration
@@ -98,15 +96,13 @@ Host noyesdemos
     StrictHostKeyChecking no
 ```
 
-This allows you to simply use `ssh noyesdemos` to connect to the server.
-
 ## Environment Variables
 
 The application requires the following environment variables:
 
 - `OPENAI_API_KEY`: Your OpenAI API key
 
-These should be set in a `.env` file in the application root directory. The deployment script will automatically include them in the PM2 configuration.
+These should be set in a `.env` file in the application root directory. The deployment script will automatically copy them to the new deployment.
 
 ## About Next.js Standalone Mode
 
@@ -115,44 +111,52 @@ This application uses Next.js standalone output mode, which requires special han
 1. The standalone output is created in `.next/standalone/`
 2. Static files from `public/` must be copied to `.next/standalone/public/`
 3. Next.js static assets in `.next/static/` must be copied to `.next/standalone/.next/static/`
-4. PM2 must be configured to use the standalone directory as its working directory
 
 Our deployment script handles all these steps automatically.
 
+## Rolling Back Deployments
+
+If you need to roll back to a previous version:
+
+```bash
+ssh noyesdemos
+cd /home/ec2-user/deployments
+# List available deployments
+ls -la
+
+# Choose a previous deployment directory and update Nginx config
+# Then restart PM2 with that version
+```
+
 ## Troubleshooting
 
-If you encounter issues:
-
-1. **SSH Connection Problems**: Ensure your key file has the correct permissions (600):
-   ```bash
-   chmod 600 "/Users/benny/Downloads/Noyes/Noyes AI/Kellogg/bmsd-case-demo-key.pem"
-   ```
-
-2. **Deployment Failures**: Connect to the server manually to debug:
+1. **Server Resources**: Check for CPU/memory issues if deployments are slow:
    ```bash
    ssh noyesdemos
+   top
    ```
 
-3. **Application Not Running**: Check PM2 status:
+2. **Nginx Configuration**: Verify Nginx is properly routing to the correct port:
    ```bash
-   pm2 status
+   ssh noyesdemos
+   sudo nginx -t
    ```
-   
-   And logs:
+
+3. **PM2 Process Status**: Check all running processes:
    ```bash
+   ssh noyesdemos
+   pm2 list
+   ```
+
+4. **Deployment History**: View previous deployments:
+   ```bash
+   ssh noyesdemos
+   ls -la /home/ec2-user/deployments
+   ```
+
+5. **Logs**: Check application and Nginx logs:
+   ```bash
+   ssh noyesdemos
    pm2 logs noyesdemodash
-   ```
-
-4. **Environment Variables Missing**: If the application shows an error related to missing API keys:
-   ```bash
-   ssh noyesdemos
-   cd /home/ec2-user/app
-   pm2 env 0 | grep OPENAI
-   ```
-
-5. **404 Errors for Static Files**: Check if static files were correctly copied:
-   ```bash
-   ssh noyesdemos
-   ls -la /home/ec2-user/app/.next/standalone/public
-   ls -la /home/ec2-user/app/.next/standalone/.next/static
+   sudo tail -f /var/log/nginx/error.log
    ``` 
