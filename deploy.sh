@@ -50,9 +50,31 @@ ssh noyesdemos << 'ENDSSH'
   echo "Building the application..."
   npm run build
   
+  # Update the PM2 configuration to include environment variables
+  echo "Updating PM2 configuration..."
+  OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
+  cat > ecosystem.config.js << EOL
+module.exports = {
+  apps: [{
+    name: "noyesdemodash",
+    cwd: "/home/ec2-user/app",
+    script: "./.next/standalone/server.js",
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: "1G",
+    env: {
+      NODE_ENV: "production",
+      PORT: 3000,
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    }
+  }]
+}
+EOL
+  
   # Restart the application with PM2
   echo "Restarting the application..."
-  pm2 restart noyesdemodash
+  pm2 reload ecosystem.config.js
   
   echo "Deployment completed successfully!"
 ENDSSH

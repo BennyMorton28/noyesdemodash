@@ -18,7 +18,8 @@ This script will:
 5. Pull the latest changes
 6. Install dependencies
 7. Build the application
-8. Restart the service
+8. Update PM2 configuration with environment variables
+9. Restart the service
 
 ## Manual Deployment Steps
 
@@ -49,8 +50,29 @@ npm ci
 # Build the application
 npm run build
 
+# Update PM2 configuration with environment variables
+OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
+cat > ecosystem.config.js << EOL
+module.exports = {
+  apps: [{
+    name: "noyesdemodash",
+    cwd: "/home/ec2-user/app",
+    script: "./.next/standalone/server.js",
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: "1G",
+    env: {
+      NODE_ENV: "production",
+      PORT: 3000,
+      OPENAI_API_KEY: "\${OPENAI_API_KEY}"
+    }
+  }]
+}
+EOL
+
 # Restart the application
-pm2 restart noyesdemodash
+pm2 reload ecosystem.config.js
 ```
 
 ## Server SSH Configuration
@@ -66,6 +88,14 @@ Host noyesdemos
 ```
 
 This allows you to simply use `ssh noyesdemos` to connect to the server.
+
+## Environment Variables
+
+The application requires the following environment variables:
+
+- `OPENAI_API_KEY`: Your OpenAI API key
+
+These should be set in a `.env` file in the application root directory. The deployment script will automatically include them in the PM2 configuration.
 
 ## Troubleshooting
 
@@ -89,4 +119,11 @@ If you encounter issues:
    And logs:
    ```bash
    pm2 logs noyesdemodash
+   ```
+
+4. **Environment Variables Missing**: If the application shows an error related to missing API keys:
+   ```bash
+   ssh noyesdemos
+   cd /home/ec2-user/app
+   pm2 env 0 | grep OPENAI
    ``` 
