@@ -1,0 +1,23 @@
+{
+  "id": "sanjaya",
+  "title": "Sanjaya",
+  "author": "Benny",
+  "icon": "demos/sanjaya/icon.svg",
+  "assistants": [
+    {
+      "id": "pendergast",
+      "name": "pendergast",
+      "description": "igot",
+      "hasPassword": false,
+      "icon": "demos/sanjaya/assistants/pendergast/icon.svg"
+    },
+    {
+      "id": "munzy",
+      "name": "Munzy",
+      "description": "hi",
+      "hasPassword": true,
+      "password": "pickles",
+      "icon": "demos/sanjaya/assistants/munzy/icon.svg"
+    }
+  ]
+}

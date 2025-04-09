@@ -1,0 +1,23 @@
+{
+  "id": "frank",
+  "title": "Frank",
+  "author": "Frank Sacks",
+  "icon": "demos/frank/icon.svg",
+  "assistants": [
+    {
+      "id": "hank",
+      "name": "Hank",
+      "description": "Wow I love AI",
+      "hasPassword": false,
+      "icon": "demos/frank/assistants/hank/icon.svg"
+    },
+    {
+      "id": "jacob",
+      "name": "Jacob",
+      "description": "hey",
+      "hasPassword": true,
+      "password": "pickles",
+      "icon": "demos/frank/assistants/jacob/icon.svg"
+    }
+  ]
+}
