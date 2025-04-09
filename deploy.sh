@@ -42,16 +42,56 @@ ssh noyesdemos << 'ENDSSH'
   git fetch origin
   git reset --hard origin/main
   
-  # Create a timestamp for the new deployment
-  DEPLOY_ID=$(date +%Y%m%d%H%M%S)
+  # Create unique deployment ID based on date/time
+  DEPLOY_ID=$(date +"%Y%m%d%H%M%S")
   DEPLOY_DIR="/home/ec2-user/deployments/${DEPLOY_ID}"
+  
+  # Check disk space before starting
+  echo "Checking disk space before deployment..."
+  DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+  AVAILABLE_SPACE=$(df -h / | awk 'NR==2 {print $4}')
+  
+  echo "Current disk usage: ${DISK_USAGE}%"
+  echo "Available space: ${AVAILABLE_SPACE}"
+  
+  # Always clean up previous deployments before starting a new one
+  echo "Cleaning up previous deployments before starting..."
+  find /home/ec2-user/deployments -maxdepth 1 -mindepth 1 -exec rm -rf {} \;
+  echo "All previous deployments removed"
+  
+  # If disk usage is still high, clean other areas
+  DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+  if [ "$DISK_USAGE" -gt 80 ]; then
+    echo "Disk usage still high at ${DISK_USAGE}%. Performing deep cleanup..."
+    
+    # Clean npm cache
+    npm cache clean --force
+    
+    # Clean up old logs
+    sudo find /var/log -type f -name "*.gz" -delete
+    sudo find /var/log -type f -name "*.old" -delete
+    sudo find /var/log -type f -name "*.1" -delete
+    
+    # Clean temporary files
+    sudo rm -rf /tmp/*
+    
+    # Check disk space after deep cleanup
+    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+    echo "Disk usage after deep cleanup: ${DISK_USAGE}%"
+    
+    if [ "$DISK_USAGE" -gt 90 ]; then
+      echo "ERROR: Disk usage is still critically high at ${DISK_USAGE}% after all cleanup attempts."
+      echo "Please manually investigate and free up disk space before deploying."
+      exit 1
+    fi
+  fi
   
   echo "Creating new deployment directory: ${DEPLOY_DIR}"
   mkdir -p ${DEPLOY_DIR}
+  cd ${DEPLOY_DIR}
   
   # Copy current codebase to the new deployment directory
   cp -r ./ ${DEPLOY_DIR}/
-  cd ${DEPLOY_DIR}
   
   # Install dependencies
   echo "Installing dependencies..."
@@ -305,10 +345,26 @@ NGINX
   # Save PM2 configuration
   pm2 save
   
-  # Clean up old deployments (keep last 3)
-  echo "Cleaning up old deployments..."
-  cd /home/ec2-user/deployments
-  ls -t | tail -n +4 | xargs -I {} rm -rf {}
+  # Check disk space before cleanup
+  echo "Checking disk space before cleanup..."
+  df -h /
+  
+  # Store only the current deployment, remove all others
+  echo "Cleaning up all previous deployments..."
+  find /home/ec2-user/deployments -maxdepth 1 -mindepth 1 -not -name "${DEPLOY_ID}" -exec rm -rf {} \;
+  
+  # Remove old node_modules and build artifacts from the app directory
+  echo "Cleaning up old build artifacts..."
+  rm -rf /home/ec2-user/app/node_modules
+  rm -rf /home/ec2-user/app/.next
+  
+  # Check disk space after cleanup
+  echo "Disk space after cleanup:"
+  df -h /
+  
+  # Remove old PM2 logs
+  echo "Cleaning up old PM2 logs..."
+  find /home/ec2-user/.pm2/logs -type f -mtime +3 | xargs -I {} rm -f {}
   
   # Ensure demo files are in the correct location for Nginx
   echo "Ensuring demo files are in the correct location for Nginx access..."
