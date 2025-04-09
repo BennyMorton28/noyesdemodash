@@ -34,8 +34,8 @@ echo -e "\n${GREEN}Deploying to server...${NC}"
 ssh noyesdemos << 'ENDSSH'
   echo "Connected to server. Starting deployment..."
   
-  # Navigate to the application directory (update this path)
-  cd /home/ec2-user/noyesdemodash
+  # Navigate to the application directory (correct path)
+  cd /home/ec2-user/app
   
   # Pull the latest changes
   echo "Pulling latest changes from GitHub..."
@@ -51,7 +51,7 @@ ssh noyesdemos << 'ENDSSH'
   
   # Restart the application with PM2
   echo "Restarting the application..."
-  pm2 restart noyesdemodash || pm2 start ecosystem.config.js
+  pm2 restart noyesdemodash
   
   echo "Deployment completed successfully!"
 ENDSSH

@@ -37,7 +37,7 @@ git push
 ssh noyesdemos
 
 # Navigate to application directory
-cd /home/ec2-user/noyesdemodash
+cd /home/ec2-user/app
 
 # Pull latest changes
 git pull
@@ -87,5 +87,5 @@ If you encounter issues:
    
    And logs:
    ```bash
-   pm2 logs noyesdemos
+   pm2 logs noyesdemodash
    ``` 
