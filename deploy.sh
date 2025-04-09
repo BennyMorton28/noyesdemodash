@@ -88,35 +88,118 @@ ssh noyesdemos << 'ENDSSH'
   
   echo "Creating new deployment directory: ${DEPLOY_DIR}"
   mkdir -p ${DEPLOY_DIR}
-  cd ${DEPLOY_DIR}
   
   # Copy current codebase to the new deployment directory
-  cp -r ./ ${DEPLOY_DIR}/
+  echo "Copying application code to deployment directory..."
+  cp -r /home/ec2-user/app/* ${DEPLOY_DIR}/
+  cp -r /home/ec2-user/app/.next ${DEPLOY_DIR}/ 2>/dev/null || true
+  cp -r /home/ec2-user/app/.env ${DEPLOY_DIR}/ 2>/dev/null || true
+  cp -r /home/ec2-user/app/package.json ${DEPLOY_DIR}/
+  cp -r /home/ec2-user/app/package-lock.json ${DEPLOY_DIR}/ 2>/dev/null || true
+  
+  # Navigate to deployment directory
+  cd ${DEPLOY_DIR}
   
   # Install dependencies
   echo "Installing dependencies..."
-  npm ci
+  if [ -f "package-lock.json" ]; then
+    npm ci
+  else
+    echo "No package-lock.json found, using npm install instead"
+    npm install
+  fi
   
   # Build the application
   echo "Building the application..."
   npm run build
+  
+  # Verify the build was successful
+  if [ ! -d ".next" ]; then
+    echo "ERROR: Build failed - .next directory not found"
+    echo "Trying alternative build approach..."
+    
+    # Try to recover by installing dependencies from scratch
+    rm -rf node_modules
+    npm install
+    npm run build
+    
+    # Check again
+    if [ ! -d ".next" ]; then
+      echo "ERROR: Build still failed after recovery attempt. Deployment failed."
+      exit 1
+    fi
+  fi
   
   # Fix static files in standalone mode
   echo "Setting up static files for standalone mode..."
   mkdir -p .next/standalone/public
   mkdir -p .next/standalone/.next/static
   
+  # Verify that standalone mode files exist
+  if [ ! -f ".next/standalone/server.js" ]; then
+    echo "WARNING: standalone server.js not found. Copying from server directory..."
+    
+    # Try to copy from regular next output
+    mkdir -p .next/standalone
+    cp -r .next/server/* .next/standalone/ 2>/dev/null || true
+    
+    # If still not available, create a basic server file
+    if [ ! -f ".next/standalone/server.js" ]; then
+      echo "Creating basic server file as fallback..."
+      cat > .next/standalone/server.js << 'SERVER_JS'
+const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
+
+const dev = process.env.NODE_ENV !== 'production';
+const hostname = process.env.HOST || '0.0.0.0';
+const port = parseInt(process.env.PORT || '3000', 10);
+
+const app = next({ dev, dir: __dirname, hostname, port });
+const handle = app.getRequestHandler();
+
+app.prepare().then(() => {
+  createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    handle(req, res, parsedUrl);
+  }).listen(port, hostname, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://${hostname}:${port}`);
+  });
+});
+SERVER_JS
+    fi
+  fi
+  
   # Copy public directory to standalone
-  cp -r public/* .next/standalone/public/
+  echo "Copying public files..."
+  if [ -d "public" ]; then
+    cp -r public/* .next/standalone/public/ 2>/dev/null || echo "Warning: No files in public directory"
+  else
+    echo "Warning: public directory not found"
+    mkdir -p .next/standalone/public
+  fi
   
   # Make sure all icon files are properly copied and have correct permissions
-  find .next/standalone/public -name "*.svg" -o -name "*.png" | xargs -I{} chmod 644 {} 2>/dev/null || true
+  find .next/standalone/public -name "*.svg" -o -name "*.png" | xargs -I{} chmod 644 {} 2>/dev/null || echo "Warning: No icon files found"
   
   # Copy static files to standalone static directory
-  cp -r .next/static/* .next/standalone/.next/static/
+  echo "Copying static files..."
+  if [ -d ".next/static" ]; then
+    cp -r .next/static/* .next/standalone/.next/static/ 2>/dev/null || echo "Warning: Failed to copy static files"
+  else
+    echo "Warning: .next/static directory not found"
+    mkdir -p .next/standalone/.next/static
+  fi
   
   # Copy .env file
-  cp /home/ec2-user/app/.env .next/standalone/
+  echo "Copying environment file..."
+  if [ -f "/home/ec2-user/app/.env" ]; then
+    cp /home/ec2-user/app/.env .next/standalone/ || echo "Warning: Failed to copy .env file"
+  else
+    echo "Warning: .env file not found, creating empty one"
+    touch .next/standalone/.env
+  fi
   
   # Define the target port for the application
   TARGET_PORT=3000
