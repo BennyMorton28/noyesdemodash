@@ -225,14 +225,29 @@ NGINX
   echo "Verifying application is running on port ${TARGET_PORT}..."
   APP_PORT=""
   
-  # Wait up to 30 seconds for the app to start
+  # Get the internal IP
+  INTERNAL_IP=$(hostname -I | awk '{print $1}')
+  echo "Server internal IP: ${INTERNAL_IP}"
+  
+  # Wait up to 30 seconds for the app to start - try multiple ways to connect
   for i in {1..30}; do
+    # Try various ways to connect to the application
     if curl -s http://localhost:${TARGET_PORT} > /dev/null; then
       APP_PORT=${TARGET_PORT}
+      echo "✅ App is accessible via localhost:${TARGET_PORT}"
       break
+    elif curl -s http://127.0.0.1:${TARGET_PORT} > /dev/null; then
+      APP_PORT=${TARGET_PORT}
+      echo "✅ App is accessible via 127.0.0.1:${TARGET_PORT}"
+      break
+    elif curl -s http://${INTERNAL_IP}:${TARGET_PORT} > /dev/null; then
+      APP_PORT=${TARGET_PORT}
+      echo "✅ App is accessible via ${INTERNAL_IP}:${TARGET_PORT}"
+      break
+    else
+      echo "Waiting for app to start on port ${TARGET_PORT}... (${i}/30)"
+      sleep 1
     fi
-    echo "Waiting for app to start on port ${TARGET_PORT}... (${i}/30)"
-    sleep 1
   done
   
   # If app is not running on TARGET_PORT, check alternative ports
@@ -243,13 +258,34 @@ NGINX
     echo "Checking if something else is using port ${TARGET_PORT}:"
     sudo lsof -i:${TARGET_PORT}
     
-    echo "Attempting to restart the application on port ${TARGET_PORT}..."
-    pm2 restart noyesdemodash-${DEPLOY_ID}
-    sleep 5
+    echo "Attempting to fix the application configuration..."
+    # Get the PM2 ecosystem file
+    ECOSYSTEM_FILE=$(find /home/ec2-user/deployments/${DEPLOY_ID} -name "ecosystem.config.js")
     
-    if curl -s http://localhost:${TARGET_PORT} > /dev/null; then
-      APP_PORT=${TARGET_PORT}
-      echo "✅ Application restarted successfully on port ${TARGET_PORT}"
+    if [ ! -z "$ECOSYSTEM_FILE" ]; then
+      echo "Updating ecosystem file to ensure HOST is set to 0.0.0.0..."
+      sed -i 's/HOST: "[^"]*"/HOST: "0.0.0.0"/g' $ECOSYSTEM_FILE
+      sed -i 's/PORT: [0-9]*/PORT: '${TARGET_PORT}'/g' $ECOSYSTEM_FILE
+      
+      echo "Updated ecosystem file:"
+      cat $ECOSYSTEM_FILE
+      
+      echo "Restarting the application with updated configuration..."
+      pm2 restart noyesdemodash-${DEPLOY_ID}
+      sleep 10
+      
+      # Try connecting again after restart
+      if curl -s http://localhost:${TARGET_PORT} > /dev/null || \
+         curl -s http://127.0.0.1:${TARGET_PORT} > /dev/null || \
+         curl -s http://${INTERNAL_IP}:${TARGET_PORT} > /dev/null; then
+        APP_PORT=${TARGET_PORT}
+        echo "✅ Application successfully fixed and is now responding on port ${TARGET_PORT}"
+      else
+        echo "❌ Failed to start application on expected port. Deployment failed."
+        echo "Logs from the application:"
+        pm2 logs noyesdemodash-${DEPLOY_ID} --lines 20 --nostream 
+        exit 1
+      fi
     else
       echo "❌ Failed to start application on expected port. Deployment failed."
       exit 1
