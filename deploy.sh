@@ -252,6 +252,21 @@ NGINX
   cd /home/ec2-user/deployments
   ls -t | tail -n +4 | xargs -I {} rm -rf {}
   
+  # Ensure demo files are in the correct location for Nginx
+  echo "Ensuring demo files are in the correct location for Nginx access..."
+  sudo mkdir -p /home/ec2-user/app/public
+  sudo rm -rf /home/ec2-user/app/public/demos
+  sudo rm -rf /home/ec2-user/app/public/markdown
+  sudo rm -rf /home/ec2-user/app/public/icons
+  
+  # Copy all demo files from the latest deployment to where Nginx expects them
+  sudo cp -r /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/* /home/ec2-user/app/public/
+  
+  # Set correct permissions
+  sudo chown -R ec2-user:ec2-user /home/ec2-user/app/public
+  sudo find /home/ec2-user/app/public -type f -exec chmod 644 {} \;
+  sudo find /home/ec2-user/app/public -type d -exec chmod 755 {} \;
+  
   # Verify the site is accessible
   echo "Verifying site accessibility..."
   if curl -s -I https://demos.noyesai.com | grep -q "200 OK"; then
