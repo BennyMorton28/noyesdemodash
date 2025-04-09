@@ -302,22 +302,16 @@ server {
         add_header Cache-Control "public, no-transform";
     }
     
-    # Serve demos folder directly - both existing deployed demos and newly created ones
+    # DIRECT ACCESS TO STANDALONE DIRECTORY DEMOS
+    # This ensures that any demo created through the UI is immediately accessible
     location /demos/ {
-        # First try the main demos directory for deployed demos
+        # First try the standard deployed demo directory
         root /home/ec2-user/app/public;
         
-        # If not found, try the demos_live symlink for newly created demos
-        try_files \$uri \$uri/ /demos_live\$uri /demos_live\$uri/ =404;
+        # Then try the actual standalone directory where the app is running
+        # This is where newly created demos are saved
+        try_files \$uri \$uri/ /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public\$uri =404;
         
-        access_log off;
-        expires 1d;
-        add_header Cache-Control "public, max-age=86400";
-    }
-    
-    # Serve newly created demos directly from the demos_live symlink
-    location /demos_live/ {
-        alias /home/ec2-user/app/public/demos_live/;
         access_log off;
         expires 1d;
         add_header Cache-Control "public, max-age=86400";
@@ -517,11 +511,11 @@ NGINX
   sudo find /home/ec2-user/app/public -type f -exec chmod 644 {} \;
   sudo find /home/ec2-user/app/public -type d -exec chmod 755 {} \;
   
-  # Create symlink for new demos to be immediately accessible
-  echo "Creating symlink for newly created demos..."
-  sudo ln -sf /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/demos /home/ec2-user/app/public/demos_live
+  # Set permissions for runtime directory so Nginx can access it
+  echo "Setting permissions for runtime directory..."
+  sudo chmod -R 755 /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public
   
-  # Verify app is working
+  # Verify the site is accessible
   echo "Verifying app is operational..."
   MAX_RETRIES=5
   RETRY_COUNT=0
