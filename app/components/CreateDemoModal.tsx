@@ -186,150 +186,173 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
 
   if (!isOpen) return null;
 
+  // Common input class to maintain consistency
+  const inputClass = "mt-2 px-4 py-3 block w-full bg-white dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-500 dark:text-white transition duration-150 ease-in-out";
+  const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+  const fileInputClass = "mt-2 block w-full text-sm text-gray-700 dark:text-gray-300 file:mr-4 file:py-2.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 dark:file:bg-blue-900 file:text-blue-700 dark:file:text-blue-200 hover:file:bg-blue-100 dark:hover:file:bg-blue-800 focus:outline-none";
+
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-6">
-        <h2 className="text-xl font-bold">Create New Demo</h2>
+        <h2 className="text-xl font-bold mb-6 text-gray-800 dark:text-white">Create New Demo</h2>
         
         {/* Demo Title */}
-        <div>
-          <label className="block text-sm font-medium">Demo Title</label>
+        <div className="space-y-1">
+          <label className={labelClass} htmlFor="demo-title">Demo Title</label>
           <input
+            id="demo-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            className={inputClass}
+            placeholder="Enter a title for your demo"
             required
           />
         </div>
 
         {/* Author */}
-        <div>
-          <label className="block text-sm font-medium">Author</label>
+        <div className="space-y-1">
+          <label className={labelClass} htmlFor="demo-author">Author</label>
           <input
+            id="demo-author"
             type="text"
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            className={inputClass}
+            placeholder="Your name"
             required
           />
         </div>
 
         {/* Demo Explainer Markdown */}
-        <div>
-          <label className="block text-sm font-medium">Demo Explainer (Markdown)</label>
-          <p className="text-sm text-gray-500 mb-2">
+        <div className="space-y-1">
+          <label className={labelClass} htmlFor="explainer-file">Demo Explainer (Markdown)</label>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
             This markdown file will be shown in the right panel of your demo and should explain how to use the demo and its assistants.
           </p>
           <input
+            id="explainer-file"
             type="file"
             accept=".md,text/markdown"
             onChange={(e) => setExplainerFile(e.target.files?.[0] || null)}
-            className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            className={fileInputClass}
             required
+            aria-label="Upload demo explainer markdown file"
           />
         </div>
 
         {/* Icon Upload */}
-        <div>
-          <label className="block text-sm font-medium">Demo Icon (SVG)</label>
+        <div className="space-y-1">
+          <label className={labelClass} htmlFor="demo-icon">Demo Icon (SVG)</label>
           <input
+            id="demo-icon"
             type="file"
             accept=".svg"
             onChange={(e) => setIconFile(e.target.files?.[0] || null)}
-            className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            className={fileInputClass}
+            aria-label="Upload demo icon SVG file"
           />
         </div>
 
         {/* Assistant Fields */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-medium">Assistants</h3>
+        <div className="space-y-6">
+          <h3 className="text-lg font-medium text-gray-800 dark:text-white pt-2">Assistants</h3>
           {assistants.map((assistant, index) => (
-            <div key={index} className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <div>
-                <label className="block text-sm font-medium">Assistant Name</label>
+            <div key={index} className="space-y-4 p-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div className="space-y-1">
+                <label className={labelClass} htmlFor={`assistant-name-${index}`}>Assistant Name</label>
                 <input
+                  id={`assistant-name-${index}`}
                   type="text"
                   value={assistant.name}
                   onChange={(e) => handleAssistantChange(index, 'name', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className={inputClass}
+                  placeholder="Name of the assistant"
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium">Description</label>
+              <div className="space-y-1">
+                <label className={labelClass} htmlFor={`assistant-desc-${index}`}>Description</label>
                 <textarea
+                  id={`assistant-desc-${index}`}
                   value={assistant.description}
                   onChange={(e) => handleAssistantChange(index, 'description', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className={inputClass}
                   rows={3}
+                  placeholder="Describe what this assistant does"
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium">Assistant Icon (SVG)</label>
+              <div className="space-y-1">
+                <label className={labelClass} htmlFor={`assistant-icon-${index}`}>Assistant Icon (SVG)</label>
                 <input
+                  id={`assistant-icon-${index}`}
                   type="file"
                   accept=".svg"
                   onChange={(e) => handleAssistantIconChange(index, e)}
-                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  className={fileInputClass}
+                  aria-label={`Upload icon for assistant ${assistant.name || index+1}`}
                 />
-                {assistant.iconFile && (
-                  <p className="mt-1 text-sm text-green-600">
-                    Icon selected: {assistant.iconFile.name}
-                  </p>
-                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium">Instructions (Markdown)</label>
-                <p className="text-sm text-gray-500 mb-2">
-                  This markdown file contains the instructions for how this assistant should behave.
-                </p>
+              
+              <div className="space-y-1">
+                <label className={labelClass} htmlFor={`markdown-file-${index}`}>Markdown Content</label>
                 <input
+                  id={`markdown-file-${index}`}
                   type="file"
                   accept=".md,text/markdown"
                   onChange={(e) => handleMarkdownFileChange(index, e.target.files?.[0] || null)}
-                  className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  className={fileInputClass}
                   required
+                  aria-label={`Upload markdown content for assistant ${assistant.name || index+1}`}
                 />
               </div>
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={assistant.hasPassword}
-                    onChange={(e) => handleAssistantChange(index, 'hasPassword', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label className="ml-2 text-sm">Password Protected</label>
-                </div>
-                {assistant.hasPassword && (
-                  <div className="flex-1">
-                    <input
-                      type="password"
-                      value={assistant.password || ''}
-                      onChange={(e) => handleAssistantChange(index, 'password', e.target.value)}
-                      placeholder="Enter password"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                )}
+              
+              <div className="flex items-center mt-4">
+                <input
+                  type="checkbox"
+                  id={`password-${index}`}
+                  checked={assistant.hasPassword}
+                  onChange={(e) => handleAssistantChange(index, 'hasPassword', e.target.checked)}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  aria-label="Require password protection"
+                />
+                <label htmlFor={`password-${index}`} className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                  Require Password
+                </label>
               </div>
-              {index > 0 && (
+              
+              {assistant.hasPassword && (
+                <div className="space-y-1 mt-3">
+                  <label className={labelClass} htmlFor={`assistant-password-${index}`}>Password</label>
+                  <input
+                    id={`assistant-password-${index}`}
+                    type="password"
+                    value={assistant.password || ''}
+                    onChange={(e) => handleAssistantChange(index, 'password', e.target.value)}
+                    className={inputClass}
+                    placeholder="Enter password"
+                    required={assistant.hasPassword}
+                  />
+                </div>
+              )}
+              
+              {assistants.length > 1 && (
                 <button
                   type="button"
                   onClick={() => {
-                    const newAssistants = assistants.filter((_, i) => i !== index);
+                    const newAssistants = [...assistants];
+                    newAssistants.splice(index, 1);
                     setAssistants(newAssistants);
                   }}
-                  className="text-red-600 hover:text-red-800"
+                  className="mt-4 inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800"
                 >
-                  Remove Assistant
+                  <TrashIcon className="h-4 w-4 mr-1" /> Remove Assistant
                 </button>
               )}
             </div>
           ))}
+          
           <button
             type="button"
             onClick={() => setAssistants([...assistants, {
@@ -338,24 +361,24 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
               description: '',
               hasPassword: false
             }])}
-            className="mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
           >
-            Add Assistant
+            <PlusIcon className="h-4 w-4 mr-1" /> Add Assistant
           </button>
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end space-x-3">
+        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
           >
             Create Demo
           </button>
