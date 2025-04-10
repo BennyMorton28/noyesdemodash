@@ -130,76 +130,34 @@ ssh noyesdemos << 'ENDSSH'
     fi
   fi
   
-  # Fix static files in standalone mode
+  # Setting up static files for standalone mode...
   echo "Setting up static files for standalone mode..."
-  mkdir -p .next/standalone/public
-  mkdir -p .next/standalone/.next/static
   
-  # Verify that standalone mode files exist
-  if [ ! -f ".next/standalone/server.js" ]; then
-    echo "WARNING: standalone server.js not found. Copying from server directory..."
-    
-    # Try to copy from regular next output
-    mkdir -p .next/standalone
-    cp -r .next/server/* .next/standalone/ 2>/dev/null || true
-    
-    # If still not available, create a basic server file
-    if [ ! -f ".next/standalone/server.js" ]; then
-      echo "Creating basic server file as fallback..."
-      cat > .next/standalone/server.js << 'SERVER_JS'
-const { createServer } = require('http');
-const { parse } = require('url');
-const next = require('next');
-
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOST || '0.0.0.0';
-const port = parseInt(process.env.PORT || '3000', 10);
-
-const app = next({ dev, dir: __dirname, hostname, port });
-const handle = app.getRequestHandler();
-
-app.prepare().then(() => {
-  createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  }).listen(port, hostname, (err) => {
-    if (err) throw err;
-    console.log(`> Ready on http://${hostname}:${port}`);
-  });
-});
-SERVER_JS
-    fi
-  fi
-  
-  # Copy public directory to standalone
+  # Copy public files
   echo "Copying public files..."
-  if [ -d "public" ]; then
-    cp -r public/* .next/standalone/public/ 2>/dev/null || echo "Warning: No files in public directory"
-  else
-    echo "Warning: public directory not found"
-    mkdir -p .next/standalone/public
-  fi
+  sudo cp -r ${DEPLOY_DIR}/public/* ${DEPLOY_DIR}/.next/standalone/public/
   
-  # Make sure all icon files are properly copied and have correct permissions
-  find .next/standalone/public -name "*.svg" -o -name "*.png" | xargs -I{} chmod 644 {} 2>/dev/null || echo "Warning: No icon files found"
-  
-  # Copy static files to standalone static directory
+  # Copy static files
   echo "Copying static files..."
-  if [ -d ".next/static" ]; then
-    cp -r .next/static/* .next/standalone/.next/static/ 2>/dev/null || echo "Warning: Failed to copy static files"
-  else
-    echo "Warning: .next/static directory not found"
-    mkdir -p .next/standalone/.next/static
-  fi
+  sudo mkdir -p ${DEPLOY_DIR}/.next/standalone/.next/static
+  sudo cp -r ${DEPLOY_DIR}/.next/static/* ${DEPLOY_DIR}/.next/standalone/.next/static/
   
-  # Copy .env file
+  # Copy environment file
   echo "Copying environment file..."
-  if [ -f "/home/ec2-user/app/.env" ]; then
-    cp /home/ec2-user/app/.env .next/standalone/ || echo "Warning: Failed to copy .env file"
-  else
-    echo "Warning: .env file not found, creating empty one"
-    touch .next/standalone/.env
-  fi
+  sudo cp ${DEPLOY_DIR}/.env ${DEPLOY_DIR}/.next/standalone/.env
+  
+  # CRITICAL: Copy the standalone directory to the app directory
+  echo "Copying standalone directory to app directory..."
+  sudo mkdir -p /home/ec2-user/app/.next
+  sudo rm -rf /home/ec2-user/app/.next/standalone
+  sudo cp -r ${DEPLOY_DIR}/.next/standalone /home/ec2-user/app/.next/
+  
+  # Make sure public directory exists
+  sudo mkdir -p /home/ec2-user/app/public
+  sudo cp -r ${DEPLOY_DIR}/public/* /home/ec2-user/app/public/
+  
+  # Set proper permissions
+  sudo chown -R ec2-user:ec2-user /home/ec2-user/app
   
   # Define the target port for the application
   TARGET_PORT=3000
