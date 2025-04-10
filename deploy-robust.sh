@@ -142,10 +142,61 @@ ssh noyesdemos << 'ENDSSH'
   # Copy .env file to standalone directory
   cp .env .next/standalone/ 2>/dev/null || true
   
+  # Create a custom server wrapper to ensure proper binding
+  echo "Creating custom server wrapper..."
+  cat > .next/standalone/server-custom.js << 'EOSRV'
+// Custom server wrapper to ensure proper binding
+const path = require('path');
+const { createServer } = require('http');
+
+// Force binding to all interfaces
+process.env.HOSTNAME = '0.0.0.0';
+process.env.HOST = '0.0.0.0';
+
+// This file is a modified version of the automatically generated server.js
+// with additional logic to ensure proper binding to all interfaces
+const nextServer = require('next');
+
+const port = parseInt(process.env.PORT, 10) || 3000;
+const hostname = process.env.HOSTNAME || '0.0.0.0';
+const app = nextServer({ 
+  dev: false,
+  dir: path.join(__dirname),
+  hostname,
+  port,
+  customServer: true
+});
+
+const handleNextRequests = app.getRequestHandler();
+
+app.prepare().then(() => {
+  console.log(`> Server starting on http://${hostname}:${port}`);
+  createServer(async (req, res) => {
+    try {
+      await handleNextRequests(req, res);
+    } catch (err) {
+      console.error('Error occurred handling request:', err);
+      res.statusCode = 500;
+      res.end('Internal Server Error');
+    }
+  })
+  .once('error', (err) => {
+    console.error('Server error:', err);
+    process.exit(1);
+  })
+  .listen(port, '0.0.0.0', () => {
+    console.log(`> Server listening on http://0.0.0.0:${port}`);
+    console.log(`> Server also available at http://localhost:${port}`);
+    console.log(`> And http://127.0.0.1:${port}`);
+  });
+});
+EOSRV
+  
   # Fix permissions for all files
   echo "Setting correct permissions..."
   find .next/standalone -type f -exec chmod 644 {} \; 2>/dev/null || true
   find .next/standalone -type d -exec chmod 755 {} \; 2>/dev/null || true
+  chmod +x .next/standalone/server-custom.js 2>/dev/null || true
   
   # STEP 5: CONFIGURE PM2
   echo "Creating PM2 configuration..."
@@ -155,7 +206,7 @@ module.exports = {
   apps: [{
     name: "noyesdemodash",
     cwd: "${APP_DIR}/.next/standalone",
-    script: "./server.js",
+    script: "./server-custom.js",
     instances: 1,
     autorestart: true,
     watch: false,
@@ -163,7 +214,10 @@ module.exports = {
     env: {
       NODE_ENV: "production",
       PORT: 3000,
-      HOST: "0.0.0.0"
+      HOST: "0.0.0.0",
+      HOSTNAME: "0.0.0.0",
+      NEXT_PUBLIC_HOST: "0.0.0.0",
+      NEXT_SHARP_PATH: "/usr/local/lib/node_modules/sharp"
     }
   }]
 }
@@ -244,12 +298,37 @@ NGINX
   
   # STEP 8: VERIFY DEPLOYMENT
   echo "Verifying application is running..."
-  if curl -s http://localhost:3000 > /dev/null; then
-    echo "✅ Application is responding on port 3000"
+  echo "Testing multiple interfaces for application access..."
+  
+  # Try different ways to access the application
+  CURL_OPTS="-s --connect-timeout 5"
+  if curl $CURL_OPTS http://localhost:3000 > /dev/null; then
+    echo "✅ Application is responding on localhost:3000"
   else
-    echo "⚠️ Application is not responding on port 3000. Checking logs..."
-    pm2 logs noyesdemodash --lines 20
+    echo "⚠️ Application is not responding on localhost:3000"
   fi
+  
+  if curl $CURL_OPTS http://127.0.0.1:3000 > /dev/null; then
+    echo "✅ Application is responding on 127.0.0.1:3000"
+  else
+    echo "⚠️ Application is not responding on 127.0.0.1:3000"
+  fi
+  
+  # Check if the application is listening on port 3000
+  echo "Checking if port 3000 is open and listening:"
+  netstat -tulpn | grep 3000 || true
+  
+  # Check running processes
+  echo "Checking running node processes:"
+  ps aux | grep node | grep -v grep || true
+  
+  # Display PM2 process information
+  echo "PM2 process status:"
+  pm2 list
+  
+  # Check application logs if not responding
+  echo "Displaying application logs:"
+  pm2 logs noyesdemodash --lines 20 --nostream
   
   # Check if Nginx is correctly proxying
   echo "Verifying Nginx proxy..."
