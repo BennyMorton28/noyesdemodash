@@ -48,7 +48,13 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // No focus management is needed
+  // Add effect to focus input field after AI response is complete
+  useEffect(() => {
+    // Focus the input when loading finishes (AI stops responding)
+    if (!isLoading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isLoading]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
