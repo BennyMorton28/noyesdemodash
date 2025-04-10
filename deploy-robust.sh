@@ -187,9 +187,10 @@ ssh noyesdemos << 'ENDSSH'
   fi
   
   # Ensure full write permissions on demo directories
-  chmod -R 755 .next/standalone/public/demos
-  chmod -R 755 .next/standalone/public/markdown
-  chmod -R 755 .next/standalone/public/icons
+  echo "Setting proper permissions on public directories..."
+  chmod -R 777 .next/standalone/public/demos
+  chmod -R 777 .next/standalone/public/markdown
+  chmod -R 777 .next/standalone/public/icons
   
   # Copy .env file to standalone directory
   cp .env .next/standalone/ 2>/dev/null || true
@@ -255,6 +256,9 @@ EOL
   cat > /tmp/demos.noyesai.com.conf << NGINX
 server {
     server_name demos.noyesai.com;
+    
+    # Increase maximum upload size to 50MB
+    client_max_body_size 50M;
     
     location / {
         proxy_pass http://localhost:3000;
