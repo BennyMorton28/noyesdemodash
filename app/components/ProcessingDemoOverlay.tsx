@@ -86,7 +86,7 @@ export default function ProcessingDemoOverlay({ demoId, demoTitle, onComplete }:
                   setStatus('Finalizing your demo...');
                   setProgress(95);
                 }
-              } catch (configError) {
+              } catch {
                 // Ignore config error and continue polling
               }
             }

@@ -18,19 +18,30 @@ else
   commit_message="$1"
 fi
 
-# 2. Add all changes
+# 2. Make the backup script executable and run it to backup server demos
+if [ -f "./scripts/backup-server-demos.sh" ]; then
+  chmod +x ./scripts/backup-server-demos.sh
+  echo -e "\n${GREEN}Backing up server demos...${NC}"
+  ./scripts/backup-server-demos.sh
+  
+  # After backup, we might have changes to commit
+  echo -e "\n${GREEN}Checking for backup-related changes...${NC}"
+  git status
+fi
+
+# 3. Add all changes
 echo -e "\n${GREEN}Adding all changes to git...${NC}"
 git add .
 
-# 3. Commit changes
+# 4. Commit changes
 echo -e "\n${GREEN}Committing changes with message: '${commit_message}'${NC}"
 git commit -m "$commit_message"
 
-# 4. Push to GitHub
+# 5. Push to GitHub
 echo -e "\n${GREEN}Pushing to GitHub...${NC}"
 git push
 
-# 5. SSH to server and deploy (single phase with robust cleanup)
+# 6. SSH to server and deploy (single phase with robust cleanup)
 echo -e "\n${GREEN}Deploying to server...${NC}"
 ssh noyesdemos << 'ENDSSH'
   echo "Connected to server. Starting deployment..."
@@ -91,6 +102,23 @@ ssh noyesdemos << 'ENDSSH'
   if [ -f .env ]; then
     cp .env /tmp/app-backup/
   fi
+  
+  # IMPORTANT: Backup user-created demos before cleaning
+  echo "Backing up user-created demos from standalone directory..."
+  if [ -d ".next/standalone/public/demos" ]; then
+    mkdir -p /tmp/app-backup/demos
+    cp -r .next/standalone/public/demos/* /tmp/app-backup/demos/ 2>/dev/null || true
+    echo "Backed up demo files from standalone directory"
+  fi
+  
+  # Backup markdown files
+  if [ -d ".next/standalone/public/markdown" ]; then
+    mkdir -p /tmp/app-backup/markdown
+    cp -r .next/standalone/public/markdown/* /tmp/app-backup/markdown/ 2>/dev/null || true
+    echo "Backed up markdown files from standalone directory"
+  fi
+  
+  # Now clean the directory
   find . -maxdepth 1 -not -name '.env' -not -name '.' -not -name '..' -exec rm -rf {} \; 2>/dev/null || true
   
   # STEP 3: GET LATEST CODE
@@ -144,6 +172,19 @@ ssh noyesdemos << 'ENDSSH'
   mkdir -p .next/standalone/public/demos
   mkdir -p .next/standalone/public/markdown
   mkdir -p .next/standalone/public/icons
+  
+  # IMPORTANT: Restore backed up user-created demos
+  echo "Restoring user-created demos to standalone directory..."
+  if [ -d "/tmp/app-backup/demos" ]; then
+    cp -r /tmp/app-backup/demos/* .next/standalone/public/demos/ 2>/dev/null || true
+    echo "Restored demo files to standalone directory"
+  fi
+  
+  # Restore markdown files
+  if [ -d "/tmp/app-backup/markdown" ]; then
+    cp -r /tmp/app-backup/markdown/* .next/standalone/public/markdown/ 2>/dev/null || true
+    echo "Restored markdown files to standalone directory"
+  fi
   
   # Ensure full write permissions on demo directories
   chmod -R 755 .next/standalone/public/demos
