@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';  // Using fs.promises for async operations
+import fsSync from 'fs'; // Sync operations for path checks
 import path from 'path';
 import { removeSync } from 'fs-extra'; // We'll use fs-extra for directory removal
+
+/**
+ * Helper function to get the correct file path in both development and production environments
+ * In both development and production, we use process.cwd() which should point to the correct location
+ */
+function getBasePath(): string {
+  return process.cwd();
+}
 
 export async function GET(
   request: NextRequest,
@@ -15,8 +24,11 @@ export async function GET(
       return new NextResponse('Demo ID is required', { status: 400 });
     }
 
+    // Use the correct base path
+    const basePath = getBasePath();
+
     // Try to load the demo config
-    const configPath = path.join(process.cwd(), 'public', 'demos', demoId, 'config.json');
+    const configPath = path.join(basePath, 'public', 'demos', demoId, 'config.json');
     
     try {
       // Using async fs operations
@@ -56,8 +68,11 @@ export async function DELETE(
       return new NextResponse('Cannot delete static demos', { status: 403 });
     }
 
+    // Use the correct base path
+    const basePath = getBasePath();
+
     // Get the demo config first to identify all resources to delete
-    const configPath = path.join(process.cwd(), 'public', 'demos', demoId, 'config.json');
+    const configPath = path.join(basePath, 'public', 'demos', demoId, 'config.json');
     let assistants: { id: string }[] = [];
     
     try {
@@ -72,7 +87,7 @@ export async function DELETE(
     // Delete all related files in the following order:
     
     // 1. Delete markdown files for all assistants
-    const markdownDir = path.join(process.cwd(), 'public', 'markdown');
+    const markdownDir = path.join(basePath, 'public', 'markdown');
     for (const assistant of assistants) {
       try {
         const markdownPath = path.join(markdownDir, `${demoId}-${assistant.id}.md`);
@@ -87,7 +102,7 @@ export async function DELETE(
     }
 
     // 2. Delete the entire demo directory with all assets
-    const demoDir = path.join(process.cwd(), 'public', 'demos', demoId);
+    const demoDir = path.join(basePath, 'public', 'demos', demoId);
     try {
       await removeSync(demoDir);
     } catch (error) {

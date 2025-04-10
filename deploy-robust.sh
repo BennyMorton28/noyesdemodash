@@ -139,6 +139,17 @@ ssh noyesdemos << 'ENDSSH'
   cp -r public/* .next/standalone/public/ 2>/dev/null || true
   cp -r .next/static/* .next/standalone/.next/static/ 2>/dev/null || true
   
+  # Create necessary demo directories if they don't exist in public folder
+  echo "Ensuring demo directories exist..."
+  mkdir -p .next/standalone/public/demos
+  mkdir -p .next/standalone/public/markdown
+  mkdir -p .next/standalone/public/icons
+  
+  # Ensure full write permissions on demo directories
+  chmod -R 755 .next/standalone/public/demos
+  chmod -R 755 .next/standalone/public/markdown
+  chmod -R 755 .next/standalone/public/icons
+  
   # Copy .env file to standalone directory
   cp .env .next/standalone/ 2>/dev/null || true
   

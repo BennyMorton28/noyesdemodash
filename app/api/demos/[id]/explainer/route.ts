@@ -1,45 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
+import fs from 'fs';
 import path from 'path';
+
+/**
+ * Helper function to get the correct file path in both development and production environments
+ * In both development and production, we use process.cwd() which should point to the correct location
+ */
+function getBasePath(): string {
+  return process.cwd();
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Properly await the params object
-    const { id: demoId } = await Promise.resolve(params);
+    const demoId = await Promise.resolve(params.id);
+    console.log(`Fetching explainer markdown for demo: ${demoId}`);
     
-    if (!demoId) {
-      return new NextResponse('Demo ID is required', { status: 400 });
-    }
-
-    // Define paths to check for markdown files
-    const paths = [
-      path.join(process.cwd(), 'public', 'markdown', `${demoId}-explainer.md`),
-      path.join(process.cwd(), 'public', 'demos', demoId, 'explainer.md')
-    ];
-
-    // Try each path in sequence
-    for (const filePath of paths) {
-      try {
-        await fs.access(filePath);
-        const content = await fs.readFile(filePath, 'utf-8');
-        return new NextResponse(content, {
-          headers: {
-            'Content-Type': 'text/markdown',
-          },
-        });
-      } catch (error) {
-        // Continue to next path if file not found
-        continue;
+    const basePath = getBasePath();
+    
+    // Load the demo's explainer markdown file
+    let markdownContent = '';
+    try {
+      const markdownPath = path.join(basePath, 'public', 'demos', demoId, 'explainer.md');
+      
+      // Check if file exists
+      if (!fs.existsSync(markdownPath)) {
+        console.error(`Demo explainer markdown file not found: ${markdownPath}`);
+        return NextResponse.json(
+          { error: `Explainer for demo ${demoId} not found` },
+          { status: 404 }
+        );
       }
-    }
 
-    // If no file was found in any location
-    return new NextResponse('Explainer not found', { status: 404 });
+      markdownContent = fs.readFileSync(markdownPath, 'utf8');
+      console.log(`Successfully loaded explainer markdown for demo ${demoId}`);
+    } catch (error) {
+      console.error(`Error loading explainer markdown for demo ${demoId}:`, error);
+      return NextResponse.json(
+        { error: `Failed to load explainer for demo ${demoId}` },
+        { status: 500 }
+      );
+    }
+    
+    return NextResponse.json({ content: markdownContent });
   } catch (error) {
-    console.error('Error reading explainer:', error);
-    return new NextResponse('Error reading explainer', { status: 500 });
+    console.error('Error fetching explainer markdown:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch explainer markdown' },
+      { status: 500 }
+    );
   }
 } 

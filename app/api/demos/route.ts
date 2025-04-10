@@ -5,10 +5,18 @@ import path from 'path';
 // List of static demo IDs that should be excluded from API results
 const staticDemoIds = ['math-assistant', 'writing-assistant', 'language-assistant', 'coding-assistant'];
 
+/**
+ * Helper function to get the correct file path in both development and production environments
+ * In both development and production, we use process.cwd() which should point to the correct location
+ */
+function getBasePath(): string {
+  return process.cwd();
+}
+
 export async function GET() {
   try {
     // Get all dynamic demos from the public/demos directory
-    const demosDir = path.join(process.cwd(), 'public', 'demos');
+    const demosDir = path.join(getBasePath(), 'public', 'demos');
     const dynamicDemos = [];
 
     if (fs.existsSync(demosDir)) {
@@ -48,9 +56,14 @@ export async function POST(request: NextRequest) {
       return new NextResponse('Missing required fields', { status: 400 });
     }
 
+    // Get the correct base path for file operations
+    const basePath = getBasePath();
+    console.log(`Using base path: ${basePath} for demo creation`);
+
     // Create necessary directories
-    const demoDir = path.join(process.cwd(), 'public', 'demos', demoData.id);
-    const markdownDir = path.join(process.cwd(), 'public', 'markdown');
+    const demoDir = path.join(basePath, 'public', 'demos', demoData.id);
+    const markdownDir = path.join(basePath, 'public', 'markdown');
+    
     fs.mkdirSync(demoDir, { recursive: true });
     fs.mkdirSync(markdownDir, { recursive: true });
 
