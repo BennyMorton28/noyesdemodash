@@ -560,18 +560,30 @@ NGINX
     echo "Deployment completed successfully!"
   fi
   
-  # Create a symbolic link from the current deployment's demos directory to a fixed location
-  echo "Creating symbolic link for demos directory..."
-  sudo rm -f /home/ec2-user/app/current_demos_standalone
-  sudo ln -sf /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/demos /home/ec2-user/app/current_demos_standalone
+  # Symlink to the current deployment directory
+  sudo ln -sf ${DEPLOY_DIR} /home/ec2-user/app/current
 
-  # Ensure .next/static directory exists for CSS and JS files...
+  # Ensure .next/static directory exists for CSS and JS files
   echo "Ensuring .next/static directory exists for CSS and JS files..."
   sudo mkdir -p /home/ec2-user/app/.next/static
-  
+
   # Copy static files
   echo "Copying static files for CSS and JS..."
   sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
+
+  # Move to app directory
+  sudo rm -rf /home/ec2-user/app/.next/standalone || true
+  sudo cp -r ${DEPLOY_DIR}/.next/standalone /home/ec2-user/app/.next/standalone
+
+  # Make sure the public directory exists and copy public files
+  sudo mkdir -p /home/ec2-user/app/public
+  sudo cp -r ${DEPLOY_DIR}/public/* /home/ec2-user/app/public/
+
+  # Set the correct permissions
+  sudo chown -R ec2-user:ec2-user /home/ec2-user/app
+
+  # Ensure runtime directory is accessible to nginx
+  sudo chmod -R 755 /home/ec2-user/app/.next/standalone
 ENDSSH
 
 echo -e "\n${BLUE}===== Deployment Complete =====${NC}"
