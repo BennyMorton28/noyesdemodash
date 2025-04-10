@@ -42,158 +42,41 @@ ssh noyesdemos << 'ENDSSH'
   git fetch origin
   git reset --hard origin/main
   
-  # Create unique deployment ID based on date/time
-  DEPLOY_ID=$(date +"%Y%m%d%H%M%S")
+  # Create a timestamp for the new deployment
+  DEPLOY_ID=$(date +%Y%m%d%H%M%S)
   DEPLOY_DIR="/home/ec2-user/deployments/${DEPLOY_ID}"
-  
-  # Check disk space before starting
-  echo "Checking disk space before deployment..."
-  DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-  AVAILABLE_SPACE=$(df -h / | awk 'NR==2 {print $4}')
-  
-  echo "Current disk usage: ${DISK_USAGE}%"
-  echo "Available space: ${AVAILABLE_SPACE}"
-  
-  # Always clean up previous deployments before starting a new one
-  echo "Cleaning up previous deployments before starting..."
-  find /home/ec2-user/deployments -maxdepth 1 -mindepth 1 -exec rm -rf {} \;
-  echo "All previous deployments removed"
-  
-  # If disk usage is still high, clean other areas
-  DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-  if [ "$DISK_USAGE" -gt 80 ]; then
-    echo "Disk usage still high at ${DISK_USAGE}%. Performing deep cleanup..."
-    
-    # Clean npm cache
-    npm cache clean --force
-    
-    # Clean up old logs
-    sudo find /var/log -type f -name "*.gz" -delete
-    sudo find /var/log -type f -name "*.old" -delete
-    sudo find /var/log -type f -name "*.1" -delete
-    
-    # Clean temporary files
-    sudo rm -rf /tmp/*
-    
-    # Check disk space after deep cleanup
-    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-    echo "Disk usage after deep cleanup: ${DISK_USAGE}%"
-    
-    if [ "$DISK_USAGE" -gt 90 ]; then
-      echo "ERROR: Disk usage is still critically high at ${DISK_USAGE}% after all cleanup attempts."
-      echo "Please manually investigate and free up disk space before deploying."
-      exit 1
-    fi
-  fi
   
   echo "Creating new deployment directory: ${DEPLOY_DIR}"
   mkdir -p ${DEPLOY_DIR}
   
   # Copy current codebase to the new deployment directory
-  echo "Copying application code to deployment directory..."
-  cp -r /home/ec2-user/app/* ${DEPLOY_DIR}/
-  cp -r /home/ec2-user/app/.next ${DEPLOY_DIR}/ 2>/dev/null || true
-  cp -r /home/ec2-user/app/.env ${DEPLOY_DIR}/ 2>/dev/null || true
-  cp -r /home/ec2-user/app/package.json ${DEPLOY_DIR}/
-  cp -r /home/ec2-user/app/package-lock.json ${DEPLOY_DIR}/ 2>/dev/null || true
-  
-  # Navigate to deployment directory
+  cp -r ./ ${DEPLOY_DIR}/
   cd ${DEPLOY_DIR}
   
   # Install dependencies
   echo "Installing dependencies..."
-  if [ -f "package-lock.json" ]; then
-    npm ci
-  else
-    echo "No package-lock.json found, using npm install instead"
-    npm install
-  fi
+  npm ci
   
   # Build the application
   echo "Building the application..."
-  
-  # Create current_demos_standalone directory before build to prevent errors
-  mkdir -p current_demos_standalone
-  mkdir -p .next/standalone/public
-  mkdir -p public/demos
-  
-  # Temporarily modify next.config.js to not use standalone output
-  cp next.config.js next.config.js.bak
-  sed -i 's/output: .standalone.,/\/\/ output: "standalone",/' next.config.js
-  
-  # Run the build
   npm run build
   
-  # Restore original config
-  mv next.config.js.bak next.config.js
-  
-  # Verify the build was successful
-  if [ ! -d ".next" ]; then
-    echo "ERROR: Build failed - .next directory not found"
-    echo "Trying alternative build approach..."
-    
-    # Try to recover by installing dependencies from scratch
-    rm -rf node_modules
-    npm install
-    
-    # Create a basic standalone directory structure
-    mkdir -p .next/standalone
-    mkdir -p .next/standalone/public
-    mkdir -p .next/standalone/.next/static
-    
-    # Create a minimal server.js file
-    cat > .next/standalone/server.js << 'EOF'
-const { createServer } = require('http');
-const { parse } = require('url');
-const next = require('next');
-
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOST || '0.0.0.0';
-const port = parseInt(process.env.PORT || '3000', 10);
-
-const app = next({ dev, dir: __dirname, hostname, port });
-const handle = app.getRequestHandler();
-
-app.prepare().then(() => {
-  createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  }).listen(port, hostname, (err) => {
-    if (err) throw err;
-    console.log(`> Ready on http://${hostname}:${port}`);
-  });
-});
-EOF
-  fi
-  
-  # Setting up static files for standalone mode...
+  # Fix static files in standalone mode
   echo "Setting up static files for standalone mode..."
+  mkdir -p .next/standalone/public
+  mkdir -p .next/standalone/.next/static
   
-  # Copy public files
-  echo "Copying public files..."
-  sudo cp -r ${DEPLOY_DIR}/public/* ${DEPLOY_DIR}/.next/standalone/public/
+  # Copy public directory to standalone
+  cp -r public/* .next/standalone/public/
   
-  # Copy static files
-  echo "Copying static files..."
-  sudo mkdir -p ${DEPLOY_DIR}/.next/standalone/.next/static
-  sudo cp -r ${DEPLOY_DIR}/.next/static/* ${DEPLOY_DIR}/.next/standalone/.next/static/
+  # Make sure all icon files are properly copied and have correct permissions
+  find .next/standalone/public -name "*.svg" -o -name "*.png" | xargs -I{} chmod 644 {} 2>/dev/null || true
   
-  # Copy environment file
-  echo "Copying environment file..."
-  sudo cp ${DEPLOY_DIR}/.env ${DEPLOY_DIR}/.next/standalone/.env
+  # Copy static files to standalone static directory
+  cp -r .next/static/* .next/standalone/.next/static/
   
-  # CRITICAL: Copy the standalone directory to the app directory
-  echo "Copying standalone directory to app directory..."
-  sudo mkdir -p /home/ec2-user/app/.next
-  sudo rm -rf /home/ec2-user/app/.next/standalone
-  sudo cp -r ${DEPLOY_DIR}/.next/standalone /home/ec2-user/app/.next/
-  
-  # Make sure public directory exists
-  sudo mkdir -p /home/ec2-user/app/public
-  sudo cp -r ${DEPLOY_DIR}/public/* /home/ec2-user/app/public/
-  
-  # Set proper permissions
-  sudo chown -R ec2-user:ec2-user /home/ec2-user/app
+  # Copy .env file
+  cp /home/ec2-user/app/.env .next/standalone/
   
   # Define the target port for the application
   TARGET_PORT=3000
@@ -248,75 +131,31 @@ EOL
   sudo find /etc/nginx/conf.d/ -name "*.conf" -type f -exec grep -l "demos.noyesai.com" {} \; | xargs -I {} sudo cp {} /etc/nginx/conf.d/backup/ 2>/dev/null || true
   sudo find /etc/nginx/conf.d/ -name "*.conf" -type f -exec grep -l "demos.noyesai.com" {} \; | xargs -I {} sudo rm {} 2>/dev/null || true
   
-  # Get the internal IP
-  INTERNAL_IP=$(hostname -I | awk '{print $1}')
-  echo "Server internal IP: ${INTERNAL_IP}"
-  
   # Update the Nginx configuration to point to the new port with SSL support
   echo "Creating new Nginx configuration with SSL support..."
-  cat > /tmp/demos.noyesai.com.conf << NGINX
+  cat > /tmp/demos.noyesai.com.conf << 'NGINX'
 server {
     server_name demos.noyesai.com;
     
-    # Main application proxy
     location / {
-        proxy_pass http://${INTERNAL_IP}:3000;
+        proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        
-        # Increase timeouts to prevent 502s during deployment
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-        
-        # Don't fail immediately if backend is down
-        proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
     
-    # Serve favicon directly
-    location = /favicon.ico {
+    # Serve static files directly
+    location ~ ^/favicon.ico$ {
         root /home/ec2-user/app/public;
         access_log off;
         expires 30d;
         add_header Cache-Control "public, no-transform";
-        try_files \$uri =404;
-    }
-    
-    # Serve Next.js static files directly
-    location /_next/static/ {
-        alias /home/ec2-user/app/.next/static/;
-        access_log off;
-        expires 7d;
-        add_header Cache-Control "public, no-transform";
-    }
-    
-    # DIRECT ACCESS TO STANDALONE DIRECTORY DEMOS
-    # This ensures that any demo created through the UI is immediately accessible
-    location /demos/ {
-        # First try the standard deployed demo directory
-        root /home/ec2-user/app/public;
-        
-        # Then try the actual standalone directory where the app is running
-        # This is where newly created demos are saved
-        try_files \$uri \$uri/ /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public\$uri =404;
-        
-        access_log off;
-        expires 1d;
-        add_header Cache-Control "public, max-age=86400";
-    }
-    
-    # Serve public directory assets directly
-    location /public/ {
-        alias /home/ec2-user/app/public/;
-        access_log off;
-        expires 1d;
-        add_header Cache-Control "public, max-age=86400";
+        try_files $uri =404;
     }
     
     listen 443 ssl;
@@ -327,8 +166,8 @@ server {
 }
 
 server {
-    if (\$host = demos.noyesai.com) {
-        return 301 https://\$host\$request_uri;
+    if ($host = demos.noyesai.com) {
+        return 301 https://$host$request_uri;
     }
 
     listen 80; 
@@ -336,6 +175,9 @@ server {
     return 404;
 }
 NGINX
+  
+  # Replace PORT_PLACEHOLDER with actual port
+  sed -i "s/localhost:3001/localhost:${TARGET_PORT}/g" /tmp/demos.noyesai.com.conf
   
   # Test Nginx configuration
   echo "Testing Nginx configuration..."
@@ -353,66 +195,24 @@ NGINX
   echo "Verifying application is running on port ${TARGET_PORT}..."
   APP_PORT=""
   
-  # Wait up to 30 seconds for the app to start - try multiple ways to connect
+  # Wait up to 30 seconds for the app to start
   for i in {1..30}; do
-    # Try various ways to connect to the application
     if curl -s http://localhost:${TARGET_PORT} > /dev/null; then
       APP_PORT=${TARGET_PORT}
-      echo "✅ App is accessible via localhost:${TARGET_PORT}"
       break
-    elif curl -s http://127.0.0.1:${TARGET_PORT} > /dev/null; then
-      APP_PORT=${TARGET_PORT}
-      echo "✅ App is accessible via 127.0.0.1:${TARGET_PORT}"
-      break
-    elif curl -s http://${INTERNAL_IP}:${TARGET_PORT} > /dev/null; then
-      APP_PORT=${TARGET_PORT}
-      echo "✅ App is accessible via ${INTERNAL_IP}:${TARGET_PORT}"
-      break
-    else
-      echo "Waiting for app to start on port ${TARGET_PORT}... (${i}/30)"
-      sleep 1
     fi
+    echo "Waiting for app to start on port ${TARGET_PORT}... (${i}/30)"
+    sleep 1
   done
   
   # If app is not running on TARGET_PORT, check alternative ports
   if [ -z "$APP_PORT" ]; then
-    echo "App not detected on port ${TARGET_PORT}. This is a critical error."
-    echo "Checking PM2 process status:"
-    pm2 status
-    echo "Checking if something else is using port ${TARGET_PORT}:"
-    sudo lsof -i:${TARGET_PORT}
-    
-    echo "Attempting to fix the application configuration..."
-    # Get the PM2 ecosystem file
-    ECOSYSTEM_FILE=$(find /home/ec2-user/deployments/${DEPLOY_ID} -name "ecosystem.config.js")
-    
-    if [ ! -z "$ECOSYSTEM_FILE" ]; then
-      echo "Updating ecosystem file to ensure HOST is set to 0.0.0.0..."
-      sed -i 's/HOST: "[^"]*"/HOST: "0.0.0.0"/g' $ECOSYSTEM_FILE
-      sed -i 's/PORT: [0-9]*/PORT: '${TARGET_PORT}'/g' $ECOSYSTEM_FILE
-      
-      echo "Updated ecosystem file:"
-      cat $ECOSYSTEM_FILE
-      
-      echo "Restarting the application with updated configuration..."
-      pm2 restart noyesdemodash-${DEPLOY_ID}
-      sleep 10
-      
-      # Try connecting again after restart
-      if curl -s http://localhost:${TARGET_PORT} > /dev/null || \
-         curl -s http://127.0.0.1:${TARGET_PORT} > /dev/null || \
-         curl -s http://${INTERNAL_IP}:${TARGET_PORT} > /dev/null; then
-        APP_PORT=${TARGET_PORT}
-        echo "✅ Application successfully fixed and is now responding on port ${TARGET_PORT}"
-      else
-        echo "❌ Failed to start application on expected port. Deployment failed."
-        echo "Logs from the application:"
-        pm2 logs noyesdemodash-${DEPLOY_ID} --lines 20 --nostream 
-        exit 1
-      fi
-    else
-      echo "❌ Failed to start application on expected port. Deployment failed."
-      exit 1
+    echo "App not detected on port ${TARGET_PORT}, checking alternative port 3001..."
+    if curl -s http://localhost:3001 > /dev/null; then
+      APP_PORT=3001
+      echo "App found running on port 3001, updating Nginx configuration..."
+      sudo sed -i "s/proxy_pass http:\/\/localhost:${TARGET_PORT};/proxy_pass http:\/\/localhost:${APP_PORT};/g" /etc/nginx/conf.d/demos.noyesai.com.conf
+      sudo systemctl reload nginx
     fi
   fi
   
@@ -429,155 +229,20 @@ NGINX
   # Save PM2 configuration
   pm2 save
   
-  # Check disk space before cleanup
-  echo "Checking disk space before cleanup..."
-  df -h /
-  
-  # Store only the current deployment, remove all others
-  echo "Cleaning up all previous deployments..."
-  find /home/ec2-user/deployments -maxdepth 1 -mindepth 1 -not -name "${DEPLOY_ID}" -exec rm -rf {} \;
-  
-  # Remove old node_modules and build artifacts from the app directory
-  echo "Cleaning up old build artifacts..."
-  rm -rf /home/ec2-user/app/node_modules
-  rm -rf /home/ec2-user/app/.next
-  
-  # Check disk space after cleanup
-  echo "Disk space after cleanup:"
-  df -h /
-  
-  # Remove old PM2 logs
-  echo "Cleaning up old PM2 logs..."
-  find /home/ec2-user/.pm2/logs -type f -mtime +3 | xargs -I {} rm -f {}
-  
-  # Ensure demo files are in the correct location for Nginx access
-  echo "Ensuring demo files are in the correct location for Nginx access..."
-  sudo mkdir -p /home/ec2-user/app/public
-  
-  # Make sure .next/static directory exists
-  echo "Ensuring .next/static directory exists for CSS and JS files..."
-  sudo mkdir -p /home/ec2-user/app/.next/static
-  
-  # Copy static files
-  echo "Copying static files for CSS and JS..."
-  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
-  
-  # Preserve existing demo files before copying new ones
-  echo "Preserving existing demo files..."
-  if [ -d "/home/ec2-user/app/public/demos" ]; then
-    # Create a backup of current demos
-    DEMOS_BACKUP="/tmp/demos_backup_${DEPLOY_ID}"
-    sudo mkdir -p $DEMOS_BACKUP
-    sudo cp -r /home/ec2-user/app/public/demos/* $DEMOS_BACKUP/ 2>/dev/null || echo "No existing demos to back up"
-    
-    # Now copy new files but don't overwrite existing ones
-    echo "Copying new demo files from deployment..."
-    sudo mkdir -p /home/ec2-user/app/public/demos
-    
-    # Copy files from new deployment first
-    sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
-    
-    # Now restore any existing demo files that weren't in the new deployment
-    echo "Restoring any demo files not in the new deployment..."
-    if [ -d "$DEMOS_BACKUP" ]; then
-      for demo in $(ls $DEMOS_BACKUP); do
-        # If the demo doesn't exist in the new deployment, restore it
-        if [ ! -d "/home/ec2-user/app/public/demos/$demo" ]; then
-          echo "Restoring demo: $demo"
-          sudo cp -r "$DEMOS_BACKUP/$demo" "/home/ec2-user/app/public/demos/"
-        else
-          echo "Demo already exists in new deployment: $demo"
-        fi
-      done
-    fi
-    
-    # Clean up backup
-    sudo rm -rf $DEMOS_BACKUP
-  else
-    # If no existing demos, just copy everything from the new deployment
-    echo "No existing demos to preserve, copying all from new deployment..."
-    sudo cp -r ${DEPLOY_DIR}/.next/standalone/public/* /home/ec2-user/app/public/
-  fi
-  
-  # Set correct permissions
-  echo "Setting correct file permissions..."
-  sudo chown -R ec2-user:ec2-user /home/ec2-user/app/public
-  sudo find /home/ec2-user/app/public -type f -exec chmod 644 {} \;
-  sudo find /home/ec2-user/app/public -type d -exec chmod 755 {} \;
-  
-  # Set permissions for runtime directory so Nginx can access it
-  echo "Setting permissions for runtime directory..."
-  sudo chmod -R 755 /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public
+  # Clean up old deployments (keep last 3)
+  echo "Cleaning up old deployments..."
+  cd /home/ec2-user/deployments
+  ls -t | tail -n +4 | xargs -I {} rm -rf {}
   
   # Verify the site is accessible
-  echo "Verifying app is operational..."
-  MAX_RETRIES=5
-  RETRY_COUNT=0
-  APP_OK=false
-  
-  while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$APP_OK" = false ]; do
-    if curl -s -I https://demos.noyesai.com | grep -q "200 OK"; then
-      APP_OK=true
-      echo "✅ Site is accessible and returning 200 OK"
-    else
-      RETRY_COUNT=$((RETRY_COUNT+1))
-      echo "⚠️ Site verification failed. Retry $RETRY_COUNT of $MAX_RETRIES..."
-      
-      # Check if app is running
-      if ! pm2 show noyesdemodash > /dev/null 2>&1; then
-        echo "App is not running. Restarting PM2 process..."
-        pm2 restart noyesdemodash
-      fi
-      
-      # Check Nginx status
-      if ! systemctl is-active --quiet nginx; then
-        echo "Nginx is not running. Restarting Nginx..."
-        sudo systemctl restart nginx
-      else
-        echo "Reloading Nginx configuration..."
-        sudo systemctl reload nginx
-      fi
-      
-      # Wait a moment before retrying
-      sleep 10
-    fi
-  done
-  
-  if [ "$APP_OK" = false ]; then
-    echo "❌ ERROR: Site is still not accessible after $MAX_RETRIES retries!"
-    echo "Please check server logs for more information."
-    echo "Nginx status: $(systemctl status nginx | grep Active)"
-    echo "PM2 status: $(pm2 status | grep noyesdemodash)"
-    echo "Last few Nginx error log lines:"
-    sudo tail -n 20 /var/log/nginx/error.log
+  echo "Verifying site accessibility..."
+  if curl -s -I https://demos.noyesai.com | grep -q "200 OK"; then
+    echo "✅ Site is accessible and returning 200 OK"
   else
-    echo "Deployment completed successfully!"
+    echo "⚠️ Site verification failed. Please check the logs."
   fi
   
-  # Symlink to the current deployment directory
-  sudo ln -sf ${DEPLOY_DIR} /home/ec2-user/app/current
-
-  # Ensure .next/static directory exists for CSS and JS files
-  echo "Ensuring .next/static directory exists for CSS and JS files..."
-  sudo mkdir -p /home/ec2-user/app/.next/static
-
-  # Copy static files
-  echo "Copying static files for CSS and JS..."
-  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
-
-  # Move to app directory
-  sudo rm -rf /home/ec2-user/app/.next/standalone || true
-  sudo cp -r ${DEPLOY_DIR}/.next/standalone /home/ec2-user/app/.next/standalone
-
-  # Make sure the public directory exists and copy public files
-  sudo mkdir -p /home/ec2-user/app/public
-  sudo cp -r ${DEPLOY_DIR}/public/* /home/ec2-user/app/public/
-
-  # Set the correct permissions
-  sudo chown -R ec2-user:ec2-user /home/ec2-user/app
-
-  # Ensure runtime directory is accessible to nginx
-  sudo chmod -R 755 /home/ec2-user/app/.next/standalone
+  echo "Deployment completed successfully!"
 ENDSSH
 
 echo -e "\n${BLUE}===== Deployment Complete =====${NC}"
