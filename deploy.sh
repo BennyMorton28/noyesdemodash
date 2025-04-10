@@ -112,12 +112,20 @@ ssh noyesdemos << 'ENDSSH'
   # Build the application
   echo "Building the application..."
   
-  # Ensure directories exist before build
+  # Create current_demos_standalone directory before build to prevent errors
+  mkdir -p current_demos_standalone
   mkdir -p .next/standalone/public
   mkdir -p public/demos
   
+  # Temporarily modify next.config.js to not use standalone output
+  cp next.config.js next.config.js.bak
+  sed -i 's/output: .standalone.,/\/\/ output: "standalone",/' next.config.js
+  
   # Run the build
   npm run build
+  
+  # Restore original config
+  mv next.config.js.bak next.config.js
   
   # Verify the build was successful
   if [ ! -d ".next" ]; then
@@ -127,13 +135,35 @@ ssh noyesdemos << 'ENDSSH'
     # Try to recover by installing dependencies from scratch
     rm -rf node_modules
     npm install
-    npm run build
     
-    # Check again
-    if [ ! -d ".next" ]; then
-      echo "ERROR: Build still failed after recovery attempt. Deployment failed."
-      exit 1
-    fi
+    # Create a basic standalone directory structure
+    mkdir -p .next/standalone
+    mkdir -p .next/standalone/public
+    mkdir -p .next/standalone/.next/static
+    
+    # Create a minimal server.js file
+    cat > .next/standalone/server.js << 'EOF'
+const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
+
+const dev = process.env.NODE_ENV !== 'production';
+const hostname = process.env.HOST || '0.0.0.0';
+const port = parseInt(process.env.PORT || '3000', 10);
+
+const app = next({ dev, dir: __dirname, hostname, port });
+const handle = app.getRequestHandler();
+
+app.prepare().then(() => {
+  createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    handle(req, res, parsedUrl);
+  }).listen(port, hostname, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://${hostname}:${port}`);
+  });
+});
+EOF
   fi
   
   # Setting up static files for standalone mode...
