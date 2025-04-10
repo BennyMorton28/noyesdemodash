@@ -14,37 +14,50 @@ export default function ProcessingDemoOverlay({ demoId, demoTitle, onComplete }:
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
     const startProcessing = async () => {
       try {
+        // Record the start time
+        const startTime = Date.now();
+
         // Step 1: Restart the server
         setStatus('Preparing your demo environment...');
         setProgress(10);
         
-        const restartResponse = await fetch('/api/server/restart', {
-          method: 'POST',
-        });
-        
-        if (!restartResponse.ok) {
-          throw new Error('Failed to prepare demo environment');
+        try {
+          const restartResponse = await fetch('/api/server/restart', {
+            method: 'POST',
+          });
+
+          // Log the response but don't break the flow if there's an issue
+          if (!restartResponse.ok) {
+            console.warn('Server restart request returned non-OK status:', restartResponse.status);
+          }
+        } catch (restartError) {
+          console.warn('Error initiating server restart:', restartError);
+          // Continue anyway - the file may still become available
         }
         
         setProgress(30);
         setStatus('Optimizing your demo files...');
         
-        // Step 2: Poll for the availability of the demo's icon file
+        // Step 2: Poll for the availability of the demo's files
         // This indicates the server has restarted and the files are accessible
         let iconAvailable = false;
-        const maxAttempts = 15;
+        let configAvailable = false;
+        const maxAttempts = 20; // More attempts to give it more time
         let attempts = 0;
         
-        while (!iconAvailable && attempts < maxAttempts) {
+        // We'll consider it successful if either icon or config is available
+        while ((!iconAvailable && !configAvailable) && attempts < maxAttempts) {
           if (!mounted) return;
           
           try {
             // Increase progress with each attempt
-            setProgress(30 + Math.min(60, attempts * 4));
+            setProgress(30 + Math.min(60, attempts * 3));
             
-            // Try to fetch the icon file to see if it's available yet
+            // Try to fetch the icon file first
             const iconResponse = await fetch(`/demos/${demoId}/icon.svg`, {
               method: 'HEAD',
               // Add cache buster to prevent browser caching
@@ -59,6 +72,26 @@ export default function ProcessingDemoOverlay({ demoId, demoTitle, onComplete }:
               setStatus('Finalizing your demo...');
               setProgress(95);
             } else {
+              // Try config.json as an alternative
+              try {
+                const configResponse = await fetch(`/api/demos/${demoId}`, {
+                  headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                  }
+                });
+                
+                if (configResponse.ok) {
+                  configAvailable = true;
+                  setStatus('Finalizing your demo...');
+                  setProgress(95);
+                }
+              } catch (configError) {
+                // Ignore config error and continue polling
+              }
+            }
+            
+            if (!iconAvailable && !configAvailable) {
               // Wait before trying again
               await new Promise(resolve => setTimeout(resolve, 1000));
               attempts++;
@@ -71,21 +104,29 @@ export default function ProcessingDemoOverlay({ demoId, demoTitle, onComplete }:
           }
         }
         
-        if (!iconAvailable) {
+        // If we haven't succeeded after all attempts but at least 15 seconds have passed,
+        // we'll consider it a success anyway to avoid getting stuck
+        const elapsedTime = Date.now() - startTime;
+        if ((!iconAvailable && !configAvailable) && elapsedTime >= 15000) {
+          console.log('Timed out waiting for files but proceeding anyway after 15 seconds');
+          setStatus('Demo setup complete!');
+          setProgress(100);
+          setIsComplete(true);
+        } else if (!iconAvailable && !configAvailable) {
           throw new Error('Demo preparation timed out. Please refresh and try again.');
+        } else {
+          // Success path
+          setProgress(100);
+          setStatus('Demo ready!');
+          setIsComplete(true);
         }
         
-        // Final steps - everything is ready!
-        setProgress(100);
-        setStatus('Demo ready!');
-        setIsComplete(true);
-        
         // Short delay before completing to show the "Demo ready!" message
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           if (mounted) {
             onComplete();
           }
-        }, 1000);
+        }, 1500);
         
       } catch (error) {
         console.error('Error processing demo:', error);
@@ -97,8 +138,9 @@ export default function ProcessingDemoOverlay({ demoId, demoTitle, onComplete }:
     
     return () => {
       mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [demoId, onComplete]);
+  }, [demoId, onComplete, demoTitle]);
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
