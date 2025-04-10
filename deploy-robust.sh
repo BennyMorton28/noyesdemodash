@@ -142,61 +142,32 @@ ssh noyesdemos << 'ENDSSH'
   # Copy .env file to standalone directory
   cp .env .next/standalone/ 2>/dev/null || true
   
-  # Create a custom server wrapper to ensure proper binding
-  echo "Creating custom server wrapper..."
-  cat > .next/standalone/server-custom.js << 'EOSRV'
-// Custom server wrapper to ensure proper binding
-const path = require('path');
-const { createServer } = require('http');
-
-// Force binding to all interfaces
-process.env.HOSTNAME = '0.0.0.0';
-process.env.HOST = '0.0.0.0';
-
-// This file is a modified version of the automatically generated server.js
-// with additional logic to ensure proper binding to all interfaces
-const nextServer = require('next');
-
-const port = parseInt(process.env.PORT, 10) || 3000;
-const hostname = process.env.HOSTNAME || '0.0.0.0';
-const app = nextServer({ 
-  dev: false,
-  dir: path.join(__dirname),
-  hostname,
-  port,
-  customServer: true
-});
-
-const handleNextRequests = app.getRequestHandler();
-
-app.prepare().then(() => {
-  console.log(`> Server starting on http://${hostname}:${port}`);
-  createServer(async (req, res) => {
-    try {
-      await handleNextRequests(req, res);
-    } catch (err) {
-      console.error('Error occurred handling request:', err);
-      res.statusCode = 500;
-      res.end('Internal Server Error');
-    }
-  })
-  .once('error', (err) => {
-    console.error('Server error:', err);
-    process.exit(1);
-  })
-  .listen(port, '0.0.0.0', () => {
-    console.log(`> Server listening on http://0.0.0.0:${port}`);
-    console.log(`> Server also available at http://localhost:${port}`);
-    console.log(`> And http://127.0.0.1:${port}`);
-  });
-});
-EOSRV
+  # Modify server.js to bind to all interfaces (0.0.0.0)
+  echo "Modifying server.js to bind to all interfaces..."
+  SERVER_JS="${APP_DIR}/.next/standalone/server.js"
+  if [ -f "${SERVER_JS}" ]; then
+    # Create a backup
+    cp "${SERVER_JS}" "${SERVER_JS}.backup"
+    
+    # Add binding to 0.0.0.0
+    sed -i 's/server.listen(port)/server.listen(port, "0.0.0.0")/' "${SERVER_JS}" || echo "WARNING: Failed to modify server.js"
+    
+    # Check if the modification was successful
+    if grep -q "server.listen(port, \"0.0.0.0\")" "${SERVER_JS}"; then
+      echo "Successfully modified server.js to bind to all interfaces"
+    else
+      echo "WARNING: Failed to modify server.js, using original file"
+      cp "${SERVER_JS}.backup" "${SERVER_JS}" 
+    fi
+  else
+    echo "WARNING: server.js not found at ${SERVER_JS}"
+  fi
   
   # Fix permissions for all files
   echo "Setting correct permissions..."
   find .next/standalone -type f -exec chmod 644 {} \; 2>/dev/null || true
   find .next/standalone -type d -exec chmod 755 {} \; 2>/dev/null || true
-  chmod +x .next/standalone/server-custom.js 2>/dev/null || true
+  chmod +x .next/standalone/server.js 2>/dev/null || true
   
   # STEP 5: CONFIGURE PM2
   echo "Creating PM2 configuration..."
@@ -206,7 +177,7 @@ module.exports = {
   apps: [{
     name: "noyesdemodash",
     cwd: "${APP_DIR}/.next/standalone",
-    script: "./server-custom.js",
+    script: "./server.js",
     instances: 1,
     autorestart: true,
     watch: false,
@@ -216,8 +187,7 @@ module.exports = {
       PORT: 3000,
       HOST: "0.0.0.0",
       HOSTNAME: "0.0.0.0",
-      NEXT_PUBLIC_HOST: "0.0.0.0",
-      NEXT_SHARP_PATH: "/usr/local/lib/node_modules/sharp"
+      NEXT_PUBLIC_HOST: "0.0.0.0"
     }
   }]
 }
@@ -314,9 +284,21 @@ NGINX
     echo "⚠️ Application is not responding on 127.0.0.1:3000"
   fi
   
+  # Try server's internal hostname
+  HOSTNAME=$(hostname)
+  if curl $CURL_OPTS http://${HOSTNAME}:3000 > /dev/null; then
+    echo "✅ Application is responding on ${HOSTNAME}:3000"
+  else
+    echo "⚠️ Application is not responding on ${HOSTNAME}:3000"
+  fi
+  
   # Check if the application is listening on port 3000
   echo "Checking if port 3000 is open and listening:"
-  netstat -tulpn | grep 3000 || true
+  netstat -tulpn | grep 3000 || echo "Port 3000 not found in netstat output"
+  
+  # Try with ss command as well
+  echo "Checking with ss command:"
+  ss -tulpn | grep 3000 || echo "Port 3000 not found in ss output"
   
   # Check running processes
   echo "Checking running node processes:"
@@ -325,6 +307,10 @@ NGINX
   # Display PM2 process information
   echo "PM2 process status:"
   pm2 list
+  
+  # Check if server.js was modified correctly
+  echo "Checking server.js modification:"
+  grep -A 2 "server.listen" ${APP_DIR}/.next/standalone/server.js || echo "Could not find server.listen in server.js"
   
   # Check application logs if not responding
   echo "Displaying application logs:"
