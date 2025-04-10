@@ -18,7 +18,8 @@ function getBasePath(): string {
   if (isStandalone) {
     // In the standalone build on the server, we need to save to the parent app directory
     console.log('Detected standalone build environment');
-    return path.resolve(cwd, '../..'); // This should point to /home/ec2-user/app
+    // Directly return the app directory path regardless of where we are in the standalone structure
+    return '/home/ec2-user/app';
   }
   
   // In development or normal production (not standalone), use current directory
