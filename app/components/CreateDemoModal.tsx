@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import DemoIcon from './DemoIcon';
 import Modal from './Modal';
+import { useRouter } from 'next/navigation';
+import ProcessingDemoOverlay from './ProcessingDemoOverlay';
 
 interface Assistant {
   id: string;
@@ -20,7 +22,21 @@ interface CreateDemoModalProps {
   onSave: (demo: any) => void;
 }
 
+interface DemoData {
+  id: string;
+  title: string;
+  author: string;
+  assistants: {
+    id: string;
+    name: string;
+    description: string;
+    hasPassword: boolean;
+    password?: string;
+  }[];
+}
+
 export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoModalProps) {
+  const router = useRouter();
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [iconFile, setIconFile] = useState<File | null>(null);
@@ -30,10 +46,15 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
     name: '',
     description: '',
     hasPassword: false,
-    markdownFile: undefined
+    markdownFile: undefined,
+    iconFile: undefined
   }]);
   const [markdownFiles, setMarkdownFiles] = useState<Record<string, File>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // New state for processing overlay
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [createdDemo, setCreatedDemo] = useState<{id: string, title: string} | null>(null);
 
   const generateAssistantId = (name: string) => {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -97,34 +118,40 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
     e.preventDefault();
     
     try {
-      // Generate URL-friendly ID from title
-      const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      // Validate form data
+      if (assistants.length === 0) {
+        throw new Error('At least one assistant is required');
+      }
       
-      // Create demo object
-      const demo = {
-        id,
+      // Process demoId
+      const demoId = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (!demoId) {
+        throw new Error('Demo title must contain valid characters');
+      }
+      
+      // Create demo data object
+      const demoData = {
+        id: demoId,
         title,
         author,
-        icon: iconFile ? `demos/${id}/icon.svg` : undefined,
         assistants: assistants.map(assistant => ({
-          id: assistant.id,
+          id: generateAssistantId(assistant.name),
           name: assistant.name,
           description: assistant.description,
           hasPassword: assistant.hasPassword,
-          password: assistant.password,
-          icon: assistant.iconFile ? `demos/${id}/assistants/${assistant.id}/icon.svg` : undefined
+          password: assistant.hasPassword ? assistant.password : undefined
         }))
       };
-
-      // Create FormData and append demo data
-      const formData = new FormData();
-      formData.append('demo', JSON.stringify(demo));
       
-      // Append demo icon if selected
+      // Create FormData for file uploads
+      const formData = new FormData();
+      formData.append('demo', JSON.stringify(demoData));
+      
+      // Append demo icon if provided
       if (iconFile) {
         formData.append('icon', iconFile);
       }
-
+      
       // Append demo explainer markdown
       if (explainerFile) {
         formData.append('explainer', explainerFile);
@@ -159,7 +186,7 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
 
       const result = await response.json();
       
-      // Reset form and close modal
+      // Reset form
       setTitle('');
       setAuthor('');
       setIconFile(null);
@@ -172,24 +199,55 @@ export default function CreateDemoModal({ isOpen, onClose, onSave }: CreateDemoM
         markdownFile: undefined,
         iconFile: undefined
       }]);
+      
+      // Close the modal
       onClose();
       
       // Call the onSave callback with the new demo
       if (onSave) {
         onSave(result.demo);
       }
+      
+      // Show processing overlay
+      setCreatedDemo({
+        id: demoData.id,
+        title: demoData.title
+      });
+      setIsProcessing(true);
+      
     } catch (error) {
       console.error('Error creating demo:', error);
       alert(error instanceof Error ? error.message : 'Failed to create demo. Please try again.');
     }
   };
 
-  if (!isOpen) return null;
+  // Handle completion of processing
+  const handleProcessingComplete = () => {
+    if (createdDemo) {
+      // Navigate to the new demo
+      router.push(`/demo/${createdDemo.id}`);
+    }
+    setIsProcessing(false);
+    setCreatedDemo(null);
+  };
+
+  if (!isOpen && !isProcessing) return null;
 
   // Common input class to maintain consistency
   const inputClass = "mt-2 px-4 py-3 block w-full bg-white dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:border-blue-500 dark:text-white transition duration-150 ease-in-out";
   const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
   const fileInputClass = "mt-2 block w-full text-sm text-gray-700 dark:text-gray-300 file:mr-4 file:py-2.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 dark:file:bg-blue-900 file:text-blue-700 dark:file:text-blue-200 hover:file:bg-blue-100 dark:hover:file:bg-blue-800 focus:outline-none";
+
+  // Show processing overlay if we're in processing state
+  if (isProcessing && createdDemo) {
+    return (
+      <ProcessingDemoOverlay
+        demoId={createdDemo.id}
+        demoTitle={createdDemo.title}
+        onComplete={handleProcessingComplete}
+      />
+    );
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
