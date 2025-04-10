@@ -1,0 +1,15 @@
+{
+  "id": "communicate-instructions",
+  "title": "Communicate Instructions",
+  "author": "Rob Bray",
+  "assistants": [
+    {
+      "id": "r-project-creator",
+      "name": "R Project Creator",
+      "description": "I'll help you set up your environment!",
+      "hasPassword": false,
+      "icon": "demos/communicate-instructions/assistants/r-project-creator/icon.svg"
+    }
+  ],
+  "icon": "demos/communicate-instructions/icon.svg"
+}
