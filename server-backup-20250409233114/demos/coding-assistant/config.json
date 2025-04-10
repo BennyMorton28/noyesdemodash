@@ -1,0 +1,16 @@
+{
+  "id": "coding-assistant",
+  "name": "Coding Assistant",
+  "description": "An AI assistant that helps with code review, debugging, and programming tasks.",
+  "author": "Demo Platform Team",
+  "createdAt": "2024-03-20T00:00:00.000Z",
+  "assistants": [
+    {
+      "name": "Code Reviewer",
+      "description": "Reviews code for best practices, potential bugs, and improvements",
+      "isLocked": false,
+      "hasIcon": true,
+      "hasInstructions": true
+    }
+  ]
+} 
