@@ -111,6 +111,12 @@ ssh noyesdemos << 'ENDSSH'
   
   # Build the application
   echo "Building the application..."
+  
+  # Ensure directories exist before build
+  mkdir -p .next/standalone/public
+  mkdir -p public/demos
+  
+  # Run the build
   npm run build
   
   # Verify the build was successful
