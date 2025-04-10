@@ -6,9 +6,16 @@ import path from 'path';
 // Initialize OpenAI client with API key from environment variable
 const client = new OpenAI();
 
+// Define the type for a message in the conversation
+type MessageRole = 'system' | 'user' | 'assistant';
+interface ConversationMessage {
+  role: MessageRole;
+  content: string;
+}
+
 export async function POST(req: Request) {
   try {
-    const { prompt, assistantId, demoId } = await req.json();
+    const { prompt, messageHistory, assistantId, demoId } = await req.json();
 
     if (!prompt || !assistantId || !demoId) {
       return NextResponse.json(
@@ -42,22 +49,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create the full prompt with instructions
-    const fullPrompt = `You are an AI assistant with the following instructions:
-
-${instructions}
-
-User: ${prompt}`;
-
     try {
+      // Prepare the conversation input array for OpenAI
+      const formattedMessages: ConversationMessage[] = [
+        {
+          role: "system",
+          content: instructions
+        }
+      ];
+
+      // If we have message history, add it to the input
+      if (messageHistory && Array.isArray(messageHistory)) {
+        // Ensure all messages have valid roles
+        messageHistory.forEach(msg => {
+          formattedMessages.push({
+            role: (msg.role === 'user' ? 'user' : 'assistant') as MessageRole,
+            content: msg.content
+          });
+        });
+      } 
+      // If no message history is provided, add just the current prompt
+      else {
+        formattedMessages.push({
+          role: "user",
+          content: prompt
+        });
+      }
+
       const stream = await client.responses.create({
         model: "gpt-4o",
-        input: [
-          {
-            role: "user",
-            content: fullPrompt,
-          },
-        ],
+        input: formattedMessages,
         stream: true,
       });
 

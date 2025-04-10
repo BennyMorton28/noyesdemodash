@@ -85,6 +85,18 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
     abortControllerRef.current = new AbortController();
 
     try {
+      // Format messages for the API request
+      const messageHistory = messages.map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+      
+      // Add the current message (this was already added to the messages state but not included in our messageHistory yet)
+      messageHistory.push({
+        role: 'user',
+        content: currentInput
+      });
+
       const response = await fetch('/api/stream', {
         method: 'POST',
         headers: {
@@ -92,6 +104,7 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
         },
         body: JSON.stringify({ 
           prompt: currentInput,
+          messageHistory: messageHistory,
           assistantId: assistantId,
           demoId: demoId
         }),
