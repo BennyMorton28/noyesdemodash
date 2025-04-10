@@ -7,10 +7,49 @@ const staticDemoIds = ['math-assistant', 'writing-assistant', 'language-assistan
 
 /**
  * Helper function to get the correct file path in both development and production environments
- * In both development and production, we use process.cwd() which should point to the correct location
+ * Ensures files are always saved to the proper public directory regardless of environment
  */
 function getBasePath(): string {
-  return process.cwd();
+  const cwd = process.cwd();
+  console.log(`Current working directory: ${cwd}`);
+  
+  // Check if we're in the standalone build
+  const isStandalone = cwd.includes('.next/standalone');
+  if (isStandalone) {
+    // In the standalone build on the server, we need to save to the parent app directory
+    console.log('Detected standalone build environment');
+    return path.resolve(cwd, '../..'); // This should point to /home/ec2-user/app
+  }
+  
+  // In development or normal production (not standalone), use current directory
+  return cwd;
+}
+
+// Helper function to ensure directories exist
+function ensureDirectoryExists(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) {
+    console.log(`Creating directory: ${dirPath}`);
+    fs.mkdirSync(dirPath, { recursive: true });
+  } else {
+    console.log(`Directory already exists: ${dirPath}`);
+  }
+}
+
+// Helper function to validate a path is writable
+function validatePathWritable(filePath: string): boolean {
+  try {
+    const dirPath = path.dirname(filePath);
+    ensureDirectoryExists(dirPath);
+    
+    // Try to write a test file
+    const testPath = path.join(dirPath, '.write-test');
+    fs.writeFileSync(testPath, 'test');
+    fs.unlinkSync(testPath); // Clean up
+    return true;
+  } catch (error) {
+    console.error(`Path ${filePath} is not writable:`, error);
+    return false;
+  }
 }
 
 export async function GET() {
@@ -64,14 +103,24 @@ export async function POST(request: NextRequest) {
     const demoDir = path.join(basePath, 'public', 'demos', demoData.id);
     const markdownDir = path.join(basePath, 'public', 'markdown');
     
-    fs.mkdirSync(demoDir, { recursive: true });
-    fs.mkdirSync(markdownDir, { recursive: true });
+    // Use our helper function to create directories
+    ensureDirectoryExists(demoDir);
+    ensureDirectoryExists(markdownDir);
+    
+    // Validate that critical paths are writable
+    const demoConfigPath = path.join(demoDir, 'config.json');
+    if (!validatePathWritable(demoConfigPath)) {
+      console.error(`Cannot write to demo config path: ${demoConfigPath}`);
+      return new NextResponse('Server file access error', { status: 500 });
+    }
 
     // Save demo icon if provided
     if (formData.has('icon')) {
       const iconFile = formData.get('icon') as File;
       const iconBuffer = Buffer.from(await iconFile.arrayBuffer());
-      fs.writeFileSync(path.join(demoDir, 'icon.svg'), iconBuffer);
+      const iconPath = path.join(demoDir, 'icon.svg');
+      fs.writeFileSync(iconPath, iconBuffer);
+      console.log(`Saved demo icon to: ${iconPath}`);
       demoData.icon = `demos/${demoData.id}/icon.svg`;
     }
 
@@ -79,7 +128,9 @@ export async function POST(request: NextRequest) {
     const explainerFile = formData.get('explainer') as File;
     if (explainerFile) {
       const explainerBuffer = Buffer.from(await explainerFile.arrayBuffer());
-      fs.writeFileSync(path.join(demoDir, 'explainer.md'), explainerBuffer);
+      const explainerPath = path.join(demoDir, 'explainer.md');
+      fs.writeFileSync(explainerPath, explainerBuffer);
+      console.log(`Saved explainer markdown to: ${explainerPath}`);
     } else {
       return new NextResponse('Demo explainer markdown is required', { status: 400 });
     }
@@ -94,6 +145,7 @@ export async function POST(request: NextRequest) {
         // Save in public markdown directory with standardized naming
         const publicMarkdownPath = path.join(markdownDir, `${demoData.id}-${assistant.id}.md`);
         fs.writeFileSync(publicMarkdownPath, markdownBuffer);
+        console.log(`Saved assistant markdown to: ${publicMarkdownPath}`);
       } else {
         return new NextResponse(`Markdown file is required for assistant "${assistant.name}"`, { status: 400 });
       }
@@ -105,18 +157,19 @@ export async function POST(request: NextRequest) {
         
         // Create assistants directory if it doesn't exist
         const assistantsDir = path.join(demoDir, 'assistants', assistant.id);
-        fs.mkdirSync(assistantsDir, { recursive: true });
+        ensureDirectoryExists(assistantsDir);
         
         // Save the icon in the assistant's directory
         const iconPath = path.join(assistantsDir, 'icon.svg');
         fs.writeFileSync(iconPath, iconBuffer);
+        console.log(`Saved assistant icon to: ${iconPath}`);
         assistant.icon = `demos/${demoData.id}/assistants/${assistant.id}/icon.svg`;
       }
     }
 
     // Save demo configuration
-    const demoConfigPath = path.join(demoDir, 'config.json');
     fs.writeFileSync(demoConfigPath, JSON.stringify(demoData, null, 2));
+    console.log(`Saved demo config to: ${demoConfigPath}`);
 
     return new NextResponse(JSON.stringify({ success: true, demo: demoData }), {
       headers: {
@@ -125,6 +178,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating demo:', error);
-    return new NextResponse('Error creating demo', { status: 500 });
+    return new NextResponse(`Error creating demo: ${error instanceof Error ? error.message : String(error)}`, { status: 500 });
   }
 } 
