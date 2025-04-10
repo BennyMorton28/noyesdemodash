@@ -559,6 +559,19 @@ NGINX
   else
     echo "Deployment completed successfully!"
   fi
+  
+  # Create a symbolic link from the current deployment's demos directory to a fixed location
+  echo "Creating symbolic link for demos directory..."
+  sudo rm -f /home/ec2-user/app/current_demos_standalone
+  sudo ln -sf /home/ec2-user/deployments/${DEPLOY_ID}/.next/standalone/public/demos /home/ec2-user/app/current_demos_standalone
+
+  # Ensure .next/static directory exists for CSS and JS files...
+  echo "Ensuring .next/static directory exists for CSS and JS files..."
+  sudo mkdir -p /home/ec2-user/app/.next/static
+  
+  # Copy static files
+  echo "Copying static files for CSS and JS..."
+  sudo cp -r ${DEPLOY_DIR}/.next/static/* /home/ec2-user/app/.next/static/
 ENDSSH
 
 echo -e "\n${BLUE}===== Deployment Complete =====${NC}"
