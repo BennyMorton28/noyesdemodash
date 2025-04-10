@@ -7,22 +7,42 @@ const staticDemoIds = ['math-assistant', 'writing-assistant', 'language-assistan
 
 export async function GET() {
   try {
-    // Get all dynamic demos from the public/demos directory
-    const demosDir = path.join(process.cwd(), 'public', 'demos');
     const dynamicDemos = [];
-
-    if (fs.existsSync(demosDir)) {
-      const demoFolders = fs.readdirSync(demosDir);
-      
-      for (const folder of demoFolders) {
-        // Skip static demo folders
-        if (staticDemoIds.includes(folder)) continue;
+    
+    // Check if we're in production (on server) or development
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Define the base directories to check
+    const directoriesToCheck = [];
+    if (isProduction) {
+      // In production, check both locations
+      directoriesToCheck.push(
+        path.join('/home/ec2-user/app/public', 'demos'),
+        path.join(process.cwd(), 'public', 'demos')
+      );
+    } else {
+      // In development, just check the local path
+      directoriesToCheck.push(path.join(process.cwd(), 'public', 'demos'));
+    }
+    
+    // Process all directories
+    for (const demosDir of directoriesToCheck) {
+      if (fs.existsSync(demosDir)) {
+        const demoFolders = fs.readdirSync(demosDir);
         
-        const configPath = path.join(demosDir, folder, 'config.json');
-        if (fs.existsSync(configPath)) {
-          const configData = fs.readFileSync(configPath, 'utf-8');
-          const config = JSON.parse(configData);
-          dynamicDemos.push(config);
+        for (const folder of demoFolders) {
+          // Skip static demo folders
+          if (staticDemoIds.includes(folder)) continue;
+          
+          // Skip if we already processed this demo
+          if (dynamicDemos.some(demo => demo.id === folder)) continue;
+          
+          const configPath = path.join(demosDir, folder, 'config.json');
+          if (fs.existsSync(configPath)) {
+            const configData = fs.readFileSync(configPath, 'utf-8');
+            const config = JSON.parse(configData);
+            dynamicDemos.push(config);
+          }
         }
       }
     }
@@ -48,9 +68,22 @@ export async function POST(request: NextRequest) {
       return new NextResponse('Missing required fields', { status: 400 });
     }
 
+    // Check if we're in production (on server) or development
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Define the base directory - use absolute path in production
+    let publicBaseDir;
+    if (isProduction) {
+      // Use absolute path on server
+      publicBaseDir = '/home/ec2-user/app/public';
+    } else {
+      // Use relative path in development
+      publicBaseDir = path.join(process.cwd(), 'public');
+    }
+
     // Create necessary directories
-    const demoDir = path.join(process.cwd(), 'public', 'demos', demoData.id);
-    const markdownDir = path.join(process.cwd(), 'public', 'markdown');
+    const demoDir = path.join(publicBaseDir, 'demos', demoData.id);
+    const markdownDir = path.join(publicBaseDir, 'markdown');
     fs.mkdirSync(demoDir, { recursive: true });
     fs.mkdirSync(markdownDir, { recursive: true });
 
