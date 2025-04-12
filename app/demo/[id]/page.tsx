@@ -109,15 +109,14 @@ const demoConfigs: Record<string, DemoConfig> = {
 };
 
 export default function DemoInterface() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
   const demoId = params.id as string;
   const [selectedAssistant, setSelectedAssistant] = useState<Assistant | null>(null);
   const [markdownContent, setMarkdownContent] = useState<string>('');
-  const [showDebug, setShowDebug] = useState<boolean>(false);
   const [unlockedAssistants, setUnlockedAssistants] = useState<Set<string>>(new Set());
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string>('');
   const [demoConfig, setDemoConfig] = useState<DemoConfig | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Function to load markdown content - now only loads demo explainer
@@ -157,7 +156,7 @@ export default function DemoInterface() {
   useEffect(() => {
     const fetchDemoConfig = async () => {
       try {
-        setIsLoading(true);
+        setLoading(true);
         setError(null);
         
         let config: DemoConfig | null = null;
@@ -200,7 +199,7 @@ export default function DemoInterface() {
         console.error('Error fetching demo:', error);
         setError('An error occurred while loading the demo');
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
     
@@ -210,14 +209,14 @@ export default function DemoInterface() {
   const handleAssistantClick = (assistant: Assistant) => {
     if (assistant.hasPassword && !unlockedAssistants.has(assistant.id)) {
       setSelectedAssistant(assistant);
-      setPasswordError(null);
+      setPasswordError('');
     } else {
       setSelectedAssistant(assistant);
     }
   };
 
   // If demo is loading, show loading state
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
@@ -251,33 +250,29 @@ export default function DemoInterface() {
   const assistants = demoConfig.assistants;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Bar */}
-      <header className="fixed top-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-sm z-50">
+      <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
               <Link href="/" className="mr-4">
                 <ArrowLeftIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
               </Link>
-              <div className="flex items-center">
-                {demoConfig.icon ? (
+              <div className="flex-shrink-0">
+                {demoConfig?.icon ? (
                   <DemoIcon icon={demoConfig.icon} name={demoConfig.title} size={32} />
                 ) : (
-                  <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full mr-2" />
+                  <div className="h-8 w-8 bg-blue-500 rounded-full"></div>
                 )}
+              </div>
+              <div className="ml-4">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                   {demoConfig.title}
                 </h1>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setShowDebug(!showDebug)}
-                className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
-              >
-                {showDebug ? 'Hide Debug' : 'Show Debug'}
-              </button>
               <span className="text-sm text-gray-500 dark:text-gray-400">By {demoConfig.author}</span>
             </div>
           </div>
@@ -400,7 +395,7 @@ export default function DemoInterface() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              © 2023 Noyes Demos. All rights reserved.
+              © 2025 Noyes AI Demos. All rights reserved.
             </p>
             <div className="flex space-x-4">
               <button className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">

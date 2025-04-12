@@ -1,0 +1,15 @@
+{
+  "id": "guided-homeworks",
+  "title": "Guided Homeworks",
+  "author": "Rob Bray and Sebastien Martin",
+  "assistants": [
+    {
+      "id": "hw-quiz-prep-5",
+      "name": "hw_quiz_prep_5",
+      "description": "I'll help you study for the next quiz!",
+      "hasPassword": false,
+      "icon": "demos/guided-homeworks/assistants/hw-quiz-prep-5/icon.svg"
+    }
+  ],
+  "icon": "demos/guided-homeworks/icon.svg"
+}

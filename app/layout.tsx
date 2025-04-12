@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Noyes Demos",
-  description: "Interactive AI demonstrations and examples",
+  title: "Noyes AI Demos",
+  description: "Demo dashboard for Noyes AI applications",
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
