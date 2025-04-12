@@ -1,0 +1,23 @@
+{
+  "id": "ronda",
+  "title": "Ronda",
+  "author": "Rousey",
+  "assistants": [
+    {
+      "id": "wendy",
+      "name": "Wendy",
+      "description": "Nuts",
+      "hasPassword": false,
+      "icon": "demos/ronda/assistants/wendy/icon.svg"
+    },
+    {
+      "id": "frido",
+      "name": "Frido",
+      "description": "hot dogs",
+      "hasPassword": true,
+      "password": "pickles",
+      "icon": "demos/ronda/assistants/frido/icon.svg"
+    }
+  ],
+  "icon": "demos/ronda/icon.svg"
+}

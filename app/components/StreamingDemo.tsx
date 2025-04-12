@@ -12,6 +12,9 @@ import rehypeHighlight from 'rehype-highlight';
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github-dark.css';
 import DemoIcon from './DemoIcon';
+import { TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface StreamingResponse {
   item_id: string;
@@ -32,21 +35,31 @@ interface Message {
   content: string;
 }
 
-interface Props {
-  node?: any;
-  children?: React.ReactNode;
-  [key: string]: any;
-}
-
 export default function StreamingDemo({ assistantId, assistantName, demoId, assistantIcon }: StreamingDemoProps) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const exportOptionsRef = useRef<HTMLDivElement>(null);
+
+  // Close export options when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exportOptionsRef.current && !exportOptionsRef.current.contains(event.target as Node)) {
+        setShowExportOptions(false);
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Add effect to focus input field after AI response is complete
   useEffect(() => {
@@ -63,6 +76,26 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Function to handle clearing the chat
+  const handleClearChat = () => {
+    // If there's an ongoing request, abort it
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Reset all chat-related state
+    setMessages([]);
+    setInput('');
+    setIsLoading(false);
+    setError(null);
+    
+    // Focus the input field after clearing
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,19 +208,360 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
     }
   };
 
+  // Function to export chat as PDF
+  const exportAsPDF = async () => {
+    if (!chatContainerRef.current || messages.length === 0) return;
+    
+    try {
+      // Close export options menu
+      setShowExportOptions(false);
+      
+      // Create a clone of the chat container to prepare for capture
+      const chatClone = chatContainerRef.current.cloneNode(true) as HTMLElement;
+      
+      // Apply safe styling
+      chatClone.style.position = 'absolute';
+      chatClone.style.left = '-9999px';
+      chatClone.style.top = '0';
+      chatClone.style.width = '800px'; // Wider for better fit
+      chatClone.style.backgroundColor = '#ffffff';
+      chatClone.style.padding = '20px';
+      chatClone.style.color = '#000000';
+      
+      // Add a header with the assistant name at the top
+      const header = document.createElement('div');
+      header.style.fontSize = '24px';
+      header.style.fontWeight = 'bold';
+      header.style.marginBottom = '30px';
+      header.style.textAlign = 'center';
+      header.style.color = '#000000';
+      header.textContent = `Conversation with ${assistantName}`;
+      chatClone.prepend(header);
+      
+      // Better styling for the message bubbles
+      const messageElements = chatClone.querySelectorAll('.flex');
+      messageElements.forEach(messageEl => {
+        if (messageEl instanceof HTMLElement) {
+          // Add proper spacing between messages
+          messageEl.style.marginBottom = '20px';
+          
+          // Style bubble containers individually
+          const bubbleContainer = messageEl.querySelector('div:not(.prose)');
+          if (bubbleContainer instanceof HTMLElement) {
+            // Apply styles based on message type
+            const isUserMessage = bubbleContainer.classList.contains('bg-blue-500');
+            
+            // Clear background classes and apply direct styles
+            bubbleContainer.className = '';
+            bubbleContainer.style.padding = '12px';
+            bubbleContainer.style.borderRadius = '12px';
+            bubbleContainer.style.maxWidth = '75%';
+            bubbleContainer.style.marginLeft = isUserMessage ? 'auto' : '0';
+            bubbleContainer.style.marginRight = isUserMessage ? '0' : 'auto';
+            
+            // Set background and text colors directly
+            if (isUserMessage) {
+              bubbleContainer.style.backgroundColor = '#3b82f6'; // blue-500
+              bubbleContainer.style.color = '#ffffff';
+            } else {
+              bubbleContainer.style.backgroundColor = '#ffffff'; // white
+              bubbleContainer.style.color = '#000000';
+              bubbleContainer.style.border = '1px solid #e5e7eb'; // Add border for assistant messages
+            }
+            
+            // Add subtle shadows
+            bubbleContainer.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+          }
+          
+          // Ensure text content is properly styled in user messages
+          const userTextContent = messageEl.querySelector('p');
+          if (userTextContent instanceof HTMLElement && bubbleContainer instanceof HTMLElement) {
+            const isUserBubble = bubbleContainer.style.backgroundColor === '#3b82f6';
+            userTextContent.style.margin = '0';
+            userTextContent.style.padding = '0';
+            userTextContent.style.whiteSpace = 'pre-wrap';
+            userTextContent.style.color = isUserBubble ? '#ffffff' : '#000000';
+          }
+          
+          // Style markdown content in assistant messages
+          const assistantContent = messageEl.querySelector('.prose');
+          if (assistantContent instanceof HTMLElement) {
+            assistantContent.style.color = '#000000';
+            assistantContent.style.fontSize = '14px';
+            assistantContent.style.lineHeight = '1.5';
+            
+            // Style all text elements within markdown
+            const textElements = assistantContent.querySelectorAll('p, li, h1, h2, h3, blockquote, td, th');
+            textElements.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.color = '#000000';
+                el.style.margin = '8px 0';
+              }
+            });
+            
+            // Style code blocks
+            const codeElements = assistantContent.querySelectorAll('pre, code');
+            codeElements.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.backgroundColor = '#f3f4f6'; // gray-100
+                el.style.color = '#111827'; // gray-900
+                el.style.padding = el.tagName === 'PRE' ? '12px' : '2px 4px';
+                el.style.borderRadius = '4px';
+                el.style.fontFamily = 'monospace';
+              }
+            });
+          }
+        }
+      });
+      
+      // Add to document body temporarily
+      document.body.appendChild(chatClone);
+      
+      // Use html2canvas with better configuration
+      const canvas = await html2canvas(chatClone, {
+        scale: 2, // Higher scale for better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 800,
+        onclone: (clonedDoc) => {
+          // Force any remaining problematic styles
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach(el => {
+            if (el instanceof HTMLElement) {
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.backgroundColor.includes('oklch')) {
+                el.style.backgroundColor = '#ffffff';
+              }
+              if (computedStyle.color.includes('oklch')) {
+                el.style.color = '#000000';
+              }
+            }
+          });
+        }
+      });
+      
+      // Convert canvas to PDF using jsPDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`chat-with-${assistantName.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      // Clean up
+      document.body.removeChild(chatClone);
+    } catch (error) {
+      console.error('Error exporting as PDF:', error);
+      setError('Failed to export chat as PDF');
+    }
+  };
+  
+  // Function to export chat as PNG - use same styling improvements as PDF
+  const exportAsPNG = async () => {
+    if (!chatContainerRef.current || messages.length === 0) return;
+    
+    try {
+      // Close export options menu
+      setShowExportOptions(false);
+      
+      // Create a clone of the chat container to prepare for capture
+      const chatClone = chatContainerRef.current.cloneNode(true) as HTMLElement;
+      
+      // Apply safe styling
+      chatClone.style.position = 'absolute';
+      chatClone.style.left = '-9999px';
+      chatClone.style.top = '0';
+      chatClone.style.width = '800px'; // Wider for better fit
+      chatClone.style.backgroundColor = '#ffffff';
+      chatClone.style.padding = '20px';
+      chatClone.style.color = '#000000';
+      
+      // Add a header with the assistant name at the top
+      const header = document.createElement('div');
+      header.style.fontSize = '24px';
+      header.style.fontWeight = 'bold';
+      header.style.marginBottom = '30px';
+      header.style.textAlign = 'center';
+      header.style.color = '#000000';
+      header.textContent = `Conversation with ${assistantName}`;
+      chatClone.prepend(header);
+      
+      // Better styling for the message bubbles
+      const messageElements = chatClone.querySelectorAll('.flex');
+      messageElements.forEach(messageEl => {
+        if (messageEl instanceof HTMLElement) {
+          // Add proper spacing between messages
+          messageEl.style.marginBottom = '20px';
+          
+          // Get message type by checking for justify-end class
+          const isUserMessage = messageEl.classList.contains('justify-end');
+          
+          // Style bubble containers individually
+          const bubbleContainer = messageEl.querySelector('div:not(.prose)');
+          if (bubbleContainer instanceof HTMLElement) {
+            // Clear background classes and apply direct styles
+            bubbleContainer.className = '';
+            bubbleContainer.style.padding = '12px';
+            bubbleContainer.style.borderRadius = '12px';
+            bubbleContainer.style.maxWidth = '75%';
+            bubbleContainer.style.marginLeft = isUserMessage ? 'auto' : '0';
+            bubbleContainer.style.marginRight = isUserMessage ? '0' : 'auto';
+            
+            // Set background and text colors directly
+            if (isUserMessage) {
+              bubbleContainer.style.backgroundColor = '#3b82f6'; // blue-500
+              bubbleContainer.style.color = '#ffffff';
+            } else {
+              bubbleContainer.style.backgroundColor = '#ffffff'; // white
+              bubbleContainer.style.color = '#000000';
+              bubbleContainer.style.border = '1px solid #e5e7eb'; // Add border for assistant messages
+            }
+            
+            // Add subtle shadows
+            bubbleContainer.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+          }
+          
+          // Ensure text content is properly styled in user messages
+          const userTextContent = messageEl.querySelector('p');
+          if (userTextContent instanceof HTMLElement && bubbleContainer instanceof HTMLElement) {
+            const isUserBubble = isUserMessage;
+            userTextContent.style.margin = '0';
+            userTextContent.style.padding = '0';
+            userTextContent.style.whiteSpace = 'pre-wrap';
+            userTextContent.style.color = isUserBubble ? '#ffffff' : '#000000';
+          }
+          
+          // Style markdown content in assistant messages
+          const assistantContent = messageEl.querySelector('.prose');
+          if (assistantContent instanceof HTMLElement) {
+            assistantContent.style.color = '#000000';
+            assistantContent.style.fontSize = '14px';
+            assistantContent.style.lineHeight = '1.5';
+            
+            // Style all text elements within markdown
+            const textElements = assistantContent.querySelectorAll('p, li, h1, h2, h3, blockquote, td, th');
+            textElements.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.color = '#000000';
+                el.style.margin = '8px 0';
+              }
+            });
+            
+            // Style code blocks
+            const codeElements = assistantContent.querySelectorAll('pre, code');
+            codeElements.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.backgroundColor = '#f3f4f6'; // gray-100
+                el.style.color = '#111827'; // gray-900
+                el.style.padding = el.tagName === 'PRE' ? '12px' : '2px 4px';
+                el.style.borderRadius = '4px';
+                el.style.fontFamily = 'monospace';
+              }
+            });
+          }
+        }
+      });
+      
+      // Add to document body temporarily
+      document.body.appendChild(chatClone);
+      
+      // Use html2canvas with better configuration
+      const canvas = await html2canvas(chatClone, {
+        scale: 2, // Higher scale for better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 800,
+        onclone: (clonedDoc) => {
+          // Force any remaining problematic styles
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach(el => {
+            if (el instanceof HTMLElement) {
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.backgroundColor.includes('oklch')) {
+                el.style.backgroundColor = '#ffffff';
+              }
+              if (computedStyle.color.includes('oklch')) {
+                el.style.color = '#000000';
+              }
+            }
+          });
+        }
+      });
+      
+      // Create a download link
+      const link = document.createElement('a');
+      link.download = `chat-with-${assistantName.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(chatClone);
+    } catch (error) {
+      console.error('Error exporting as PNG:', error);
+      setError('Failed to export chat as PNG');
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col relative h-full">
       {/* Assistant Name Header - Fixed at top of chat */}
       <div className="flex-none bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center">
-          {assistantIcon && (
-            <div className="mr-3">
-              <DemoIcon icon={assistantIcon} name={assistantName} size={32} />
+        <div className="flex justify-between items-center">
+          <div className="flex items-center">
+            {assistantIcon && (
+              <div className="mr-3">
+                <DemoIcon icon={assistantIcon} name={assistantName} size={32} />
+              </div>
+            )}
+            <div>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">{assistantName}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Your AI assistant</p>
             </div>
-          )}
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white">{assistantName}</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Your AI assistant</p>
+          </div>
+          <div className="flex space-x-2">
+            <div className="relative" ref={exportOptionsRef}>
+              <button
+                onClick={() => setShowExportOptions(!showExportOptions)}
+                className="flex items-center px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+                disabled={messages.length === 0}
+              >
+                <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
+                Export
+              </button>
+              
+              {showExportOptions && (
+                <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border border-gray-200 dark:border-gray-700">
+                  <div className="py-1">
+                    <button
+                      onClick={exportAsPNG}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Export as PNG
+                    </button>
+                    <button
+                      onClick={exportAsPDF}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Export as PDF
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <button
+              onClick={handleClearChat}
+              className="flex items-center px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+              disabled={messages.length === 0}
+            >
+              <TrashIcon className="w-4 h-4 mr-1" />
+              Clear Chat
+            </button>
           </div>
         </div>
       </div>
@@ -218,14 +592,14 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeRaw, rehypeSanitize, [rehypeKatex, {throwOnError: false, output: 'html', trust: true}], rehypeHighlight]}
                     components={{
-                      h1: ({node, ...props}: Props) => <h1 className="text-3xl font-bold mt-8 mb-4" {...props} />,
-                      h2: ({node, ...props}: Props) => <h2 className="text-2xl font-semibold mt-6 mb-3" {...props} />,
-                      h3: ({node, ...props}: Props) => <h3 className="text-xl font-medium mt-4 mb-2" {...props} />,
-                      p: ({node, ...props}: Props) => <p className="my-4 leading-relaxed" {...props} />,
-                      ul: ({node, ...props}: Props) => <ul className="list-disc list-inside my-4 space-y-2" {...props} />,
-                      ol: ({node, ...props}: Props) => <ol className="list-decimal list-inside my-4 space-y-2" {...props} />,
-                      li: ({node, ...props}: Props) => <li className="ml-4" {...props} />,
-                      code: ({className, children, ...props}: Props) => {
+                      h1: ({children, ...props}: React.ComponentPropsWithoutRef<'h1'>) => <h1 className="text-3xl font-bold mt-8 mb-4" {...props}>{children}</h1>,
+                      h2: ({children, ...props}: React.ComponentPropsWithoutRef<'h2'>) => <h2 className="text-2xl font-semibold mt-6 mb-3" {...props}>{children}</h2>,
+                      h3: ({children, ...props}: React.ComponentPropsWithoutRef<'h3'>) => <h3 className="text-xl font-medium mt-4 mb-2" {...props}>{children}</h3>,
+                      p: ({children, ...props}: React.ComponentPropsWithoutRef<'p'>) => <p className="my-4 leading-relaxed" {...props}>{children}</p>,
+                      ul: ({children, ...props}: React.ComponentPropsWithoutRef<'ul'>) => <ul className="list-disc list-inside my-4 space-y-2" {...props}>{children}</ul>,
+                      ol: ({children, ...props}: React.ComponentPropsWithoutRef<'ol'>) => <ol className="list-decimal list-inside my-4 space-y-2" {...props}>{children}</ol>,
+                      li: ({children, ...props}: React.ComponentPropsWithoutRef<'li'>) => <li className="ml-4" {...props}>{children}</li>,
+                      code: ({className, children, ...props}: React.ComponentPropsWithoutRef<'code'>) => {
                         const isInline = !className?.includes('language-');
                         return isInline ? (
                           <code className="bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5 text-sm" {...props}>{children}</code>
@@ -233,13 +607,13 @@ export default function StreamingDemo({ assistantId, assistantName, demoId, assi
                           <code className="block bg-gray-100 dark:bg-gray-800 rounded p-4 my-4 overflow-x-auto text-sm" {...props}>{children}</code>
                         );
                       },
-                      pre: ({node, ...props}: Props) => <pre className="bg-gray-100 dark:bg-gray-800 rounded p-4 my-4 overflow-x-auto" {...props} />,
-                      blockquote: ({node, ...props}: Props) => <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 italic" {...props} />,
-                      a: ({node, ...props}: Props) => <a className="text-blue-500 hover:text-blue-600 underline" {...props} />,
-                      table: ({node, ...props}: Props) => <div className="overflow-x-auto my-6"><table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600" {...props} /></div>,
-                      th: ({node, ...props}: Props) => <th className="px-4 py-2 bg-gray-100 dark:bg-gray-800 font-semibold text-left" {...props} />,
-                      td: ({node, ...props}: Props) => <td className="px-4 py-2 border-t border-gray-200 dark:border-gray-700" {...props} />,
-                      img: ({node, ...props}: Props) => <img className="max-w-full h-auto rounded my-4" {...props} />
+                      pre: ({children, ...props}: React.ComponentPropsWithoutRef<'pre'>) => <pre className="bg-gray-100 dark:bg-gray-800 rounded p-4 my-4 overflow-x-auto" {...props}>{children}</pre>,
+                      blockquote: ({children, ...props}: React.ComponentPropsWithoutRef<'blockquote'>) => <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 italic" {...props}>{children}</blockquote>,
+                      a: ({children, ...props}: React.ComponentPropsWithoutRef<'a'>) => <a className="text-blue-500 hover:text-blue-600 underline" {...props}>{children}</a>,
+                      table: ({children, ...props}: React.ComponentPropsWithoutRef<'table'>) => <div className="overflow-x-auto my-6"><table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600" {...props}>{children}</table></div>,
+                      th: ({children, ...props}: React.ComponentPropsWithoutRef<'th'>) => <th className="px-4 py-2 bg-gray-100 dark:bg-gray-800 font-semibold text-left" {...props}>{children}</th>,
+                      td: ({children, ...props}: React.ComponentPropsWithoutRef<'td'>) => <td className="px-4 py-2 border-t border-gray-200 dark:border-gray-700" {...props}>{children}</td>,
+                      img: ({...props}: React.ComponentPropsWithoutRef<'img'>) => <img className="max-w-full h-auto rounded my-4" {...props} />
                     }}
                   >
                     {message.content}

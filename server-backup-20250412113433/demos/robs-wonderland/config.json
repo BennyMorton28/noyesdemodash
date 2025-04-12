@@ -1,0 +1,15 @@
+{
+  "id": "robs-wonderland",
+  "title": "Rob's Wonderland",
+  "author": "Benny",
+  "assistants": [
+    {
+      "id": "jingle-bells",
+      "name": "Jingle Bells",
+      "description": "Harriet",
+      "hasPassword": false,
+      "icon": "demos/robs-wonderland/assistants/jingle-bells/icon.svg"
+    }
+  ],
+  "icon": "demos/robs-wonderland/icon.svg"
+}
